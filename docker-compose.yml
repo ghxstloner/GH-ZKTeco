@@ -1,0 +1,79 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: laravel_app_airport
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      - postgres
+    networks:
+      - airport_network
+    environment:
+      - APP_ENV=${APP_ENV:-local}
+      - APP_DEBUG=${APP_DEBUG:-true}
+      - APP_KEY=${APP_KEY} # Asegúrate que APP_KEY esté en tu .env de Laravel
+      - DB_CONNECTION=pgsql
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_DATABASE=${DB_DATABASE:-airport_management}
+      - DB_USERNAME=${DB_USERNAME:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-password}
+      - SESSION_DRIVER=${SESSION_DRIVER:-database}
+      - CACHE_STORE=${CACHE_STORE:-database}
+      - QUEUE_CONNECTION=${QUEUE_CONNECTION:-database}
+
+  # Nuevo servicio Nginx
+  nginx:
+    image: nginx:alpine
+    container_name: laravel_nginx_airport
+    ports:
+      - "${APP_PORT:-8000}:80" # Accederás desde http://localhost:8000 (o el puerto que definas en APP_PORT en tu .env local)
+    volumes:
+      - .:/var/www/html:ro # Monta el código de tu aplicación (solo lectura es más seguro para Nginx)
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro # Monta tu archivo de configuración de Nginx (solo lectura)
+    depends_on:
+      - app # Nginx depende del servicio PHP-FPM (app)
+    networks:
+      - airport_network
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres_db_airport
+    ports:
+      # No es estrictamente necesario exponer el puerto de postgres al host
+      # si solo los contenedores acceden a él, pero puede ser útil para herramientas externas.
+      - "${DB_PORT_EXTERNAL:-5433}:5432" # Ejemplo: host 5433 -> container 5432
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-airport_management}
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - airport_network
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin_airport
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+    depends_on:
+      - postgres
+    networks:
+      - airport_network
+    restart: unless-stopped
+
+networks:
+  airport_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
