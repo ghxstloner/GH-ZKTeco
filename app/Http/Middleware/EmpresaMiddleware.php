@@ -19,19 +19,19 @@ class EmpresaMiddleware
     public function handle(Request $request, Closure $next)
     {
         // Obtener el código de empresa de la URL
-        $codEmpresa = $request->segment(1);
-        
+        $codEmpresa = $request->route('codigo');
+
         // Verificar si el primer segmento es un número (código de empresa)
         if (is_numeric($codEmpresa)) {
             try {
                 // Configurar la base de datos de la empresa
                 DatabaseSwitchService::setBdEmpresa($codEmpresa);
-                
+
                 // Agregar el código de empresa al request para uso posterior
                 $request->merge(['cod_empresa' => $codEmpresa]);
-                
+
                 Log::info("Empresa configurada en middleware: {$codEmpresa}");
-                
+
             } catch (\Exception $e) {
                 Log::error("Error configurando empresa en middleware: " . $e->getMessage());
                 return response('error', 400)->header('Content-Type', 'text/plain');
@@ -43,4 +43,4 @@ class EmpresaMiddleware
 
         return $next($request);
     }
-} 
+}

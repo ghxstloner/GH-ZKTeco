@@ -12,7 +12,7 @@ use App\Http\Controllers\ZKTeco\ProFaceX\DownloadProcessController;
 */
 
 // Rutas con código de empresa (multi-tenancy)
-Route::group(['prefix' => '{codEmpresa}', 'where' => ['codEmpresa' => '[0-9]+'], 'middleware' => 'empresa'], function () {
+Route::group(['prefix' => '{codigo}', 'where' => ['codigo' => '[0-9]+'], 'middleware' => 'empresa'], function () {
 
     // Rutas para dispositivos ZKTeco con empresa
     Route::prefix('iclock')->group(function () {
