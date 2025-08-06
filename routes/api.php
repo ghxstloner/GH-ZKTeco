@@ -4,7 +4,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ZKTeco\ProFaceX\UploadProcessController;
 use App\Http\Controllers\ZKTeco\ProFaceX\DownloadProcessController;
-use App\Http\Controllers\Api\MarcacionController;
 
 /*
 |--------------------------------------------------------------------------
