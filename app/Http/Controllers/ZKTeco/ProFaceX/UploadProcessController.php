@@ -211,11 +211,6 @@ class UploadProcessController extends Controller
             $devInfo->idCard_Stamp = "0";
             $devInfo->errorLog_Stamp = "0";
 
-            // Asociar empresa si se proporciona
-            if ($codEmpresa) {
-                $devInfo->COD_EMPRESA = $codEmpresa;
-            }
-
             $devInfo->save();
 
             ManagerFactory::getCommandManager()->createINFOCommand($deviceSn);
@@ -223,11 +218,6 @@ class UploadProcessController extends Controller
             $devInfo->IPADDRESS = $ipAddress;
             $devInfo->STATE = "Online";
             $devInfo->LAST_ACTIVITY = Carbon::now()->format('Y-m-d H:i:s');
-
-            // Actualizar empresa si se proporciona
-            if ($codEmpresa) {
-                $devInfo->COD_EMPRESA = $codEmpresa;
-            }
 
             $devInfo->save();
         }
@@ -335,7 +325,7 @@ class UploadProcessController extends Controller
         try {
             $photoArr = explode("\n", $data);
             $fileName = explode("=", $photoArr[0])[1];
-            $sn = explode("=", $photoArr[1])[1];
+            $sn = exploded("=", $photoArr[1])[1];
             $size = explode("=", $photoArr[2])[1];
 
             $fileSn = $filePath . "/" . $sn;
