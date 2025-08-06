@@ -3,11 +3,6 @@
 namespace App\Http\Controllers\ZKTeco\ProFaceX;
 
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\ZKTeco\ProFaceX\deviceSn;
-use App\Http\Controllers\ZKTeco\ProFaceX\devSn;
-use App\Http\Controllers\ZKTeco\ProFaceX\Exception;
-use App\Http\Controllers\ZKTeco\ProFaceX\info;
-use App\Http\Controllers\ZKTeco\ProFaceX\infoDatas;
 use App\Services\ZKTeco\ProFaceX\Constants;
 use App\Services\ZKTeco\ProFaceX\Manager\ManagerFactory;
 use App\Services\DatabaseSwitchService;
