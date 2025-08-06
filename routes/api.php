@@ -1,78 +1,58 @@
 <?php
 
-use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\TripulanteApiController;
-use App\Http\Controllers\Api\DispositivosApiController;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\ZKTeco\ProFaceX\UploadProcessController;
+use App\Http\Controllers\ZKTeco\ProFaceX\DownloadProcessController;
+use App\Http\Controllers\Api\MarcacionController;
 
-// ============================================================================
-// RUTAS ORIGINALES PARA DISPOSITIVOS ZKTECO (NO MODIFICADAS)
-// ============================================================================
+/*
+|--------------------------------------------------------------------------
+| API Routes - ZKTeco & Marcaciones Amaxonia
+|--------------------------------------------------------------------------
+*/
 
-// Rutas API para gestión de tripulantes y dispositivos ZKTeco
-Route::middleware([\App\Http\Middleware\ApiTokenMiddleware::class])->group(function () {
-    Route::post('/tripulantes', [DispositivosApiController::class, 'store']);
-    Route::post('/tripulantes/sync-devices', [DispositivosApiController::class, 'syncDevices']);
-    Route::post('/tripulantes/clear-devices', [DispositivosApiController::class, 'clearDevices']);
+// Rutas con código de empresa (multi-tenancy)
+Route::group(['prefix' => '{codEmpresa}', 'where' => ['codEmpresa' => '[0-9]+'], 'middleware' => 'empresa'], function () {
+    
+    // Rutas para dispositivos ZKTeco con empresa
+    Route::prefix('iclock')->group(function () {
+        Route::get('/cdata', [UploadProcessController::class, 'getCdata']);
+        Route::post('/cdata', [UploadProcessController::class, 'postCdata']);
+        Route::get('/devicecmd', [DownloadProcessController::class, 'getRequest']);
+        Route::post('/devicecmd', [DownloadProcessController::class, 'postDeviceCmd']);
+    });
+
+    // Rutas para marcaciones de aplicaciones móviles con empresa
+    Route::prefix('marcacion')->group(function () {
+        Route::post('/procesar', [MarcacionController::class, 'procesarMarcacion']);
+        Route::get('/obtener', [MarcacionController::class, 'obtenerMarcaciones']);
+        Route::get('/estado', [MarcacionController::class, 'verificarEstado']);
+        Route::get('/empresa', [MarcacionController::class, 'obtenerEmpresaInfo']);
+    });
 });
 
-// ============================================================================
-// RUTAS PÚBLICAS (SIN AUTENTICACIÓN - PARA REGISTRO Y LOGIN)
-// ============================================================================
-
-// Rutas de autenticación públicas
-Route::prefix('auth')->group(function () {
-    Route::post('/login', [AuthController::class, 'login']);
-    Route::post('/register', [AuthController::class, 'register']);
-    Route::post('/initiate-register', [AuthController::class, 'initiateRegister']);
-    Route::post('/verify-email', [AuthController::class, 'verifyEmailAndRegister']);
-    Route::post('/resend-pin', [AuthController::class, 'resendVerificationPin']);
-    Route::post('/check-status', [AuthController::class, 'checkStatus']);
+// Rutas sin código de empresa (para compatibilidad)
+Route::prefix('iclock')->group(function () {
+    Route::get('/cdata', [UploadProcessController::class, 'getCdata']);
+    Route::post('/cdata', [UploadProcessController::class, 'postCdata']);
+    Route::get('/devicecmd', [DownloadProcessController::class, 'getRequest']);
+    Route::post('/devicecmd', [DownloadProcessController::class, 'postDeviceCmd']);
 });
 
-// Datos públicos necesarios para el registro
-Route::get('/posiciones', [AuthController::class, 'posiciones']);
-Route::get('/aerolineas', [AuthController::class, 'aerolineas']); // ← NUEVA
+Route::prefix('marcacion')->group(function () {
+    Route::post('/procesar', [MarcacionController::class, 'procesarMarcacion']);
+    Route::get('/obtener', [MarcacionController::class, 'obtenerMarcaciones']);
+    Route::get('/estado', [MarcacionController::class, 'verificarEstado']);
+    Route::get('/empresa', [MarcacionController::class, 'obtenerEmpresaInfo']);
+});
 
-// Endpoint PÚBLICO para el sistema externo (sin autenticación)
-Route::post('/notifications/planificacion-changed', [NotificationController::class, 'planificacionChanged']);
-
-// ============================================================================
-// RUTAS PROTEGIDAS POR SANCTUM (REQUIEREN AUTENTICACIÓN)
-// ============================================================================
-
-Route::middleware(['auth:sanctum'])->group(function () {
-
-    // === Rutas de Autenticación Protegidas ===
-    Route::prefix('auth')->group(function () {
-        Route::post('/logout', [AuthController::class, 'logout']);
-        Route::get('/me', [AuthController::class, 'me']);
-    });
-
-    // === Rutas específicas para Tripulantes ===
-    Route::prefix('tripulante')->group(function () {
-        // Planificaciones del tripulante
-        Route::get('/planificaciones', [TripulanteApiController::class, 'getPlanificaciones']);
-        Route::get('/planificaciones/{id}', [TripulanteApiController::class, 'getPlanificacion']);
-        Route::get('/planificaciones/{id}/marcacion', [TripulanteApiController::class, 'getMarcacionInfo']);
-
-        // Perfil del tripulante
-        Route::get('/profile', [TripulanteApiController::class, 'getProfile']);
-        Route::put('/profile', [TripulanteApiController::class, 'updateProfile']);
-        Route::post('/change-password', [TripulanteApiController::class, 'changePassword']);
-    });
-
-    // === Rutas de Gestión de Tripulantes (CRUD - Para administradores) ===
-    Route::prefix('crew')->group(function () {
-        Route::get('/', [TripulanteApiController::class, 'index']);
-        Route::post('/', [TripulanteApiController::class, 'store']);
-        Route::get('/{id}', [TripulanteApiController::class, 'show']);
-        Route::put('/{id}', [TripulanteApiController::class, 'update']);
-        Route::delete('/{id}', [TripulanteApiController::class, 'destroy']);
-    });
-
-    Route::post('/notifications/register-fcm-token', [NotificationController::class, 'registerFcmToken']);
-    Route::delete('/notifications/remove-fcm-token', [NotificationController::class, 'removeFcmToken']);
-
+// Ruta de salud del sistema
+Route::get('/health', function () {
+    return response()->json([
+        'status' => 'ok',
+        'service' => 'Amaxonia ZKTeco API',
+        'version' => '1.0.0',
+        'timestamp' => now()->toISOString()
+    ]);
 });

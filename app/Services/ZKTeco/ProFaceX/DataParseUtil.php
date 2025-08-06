@@ -564,7 +564,7 @@ class DataParseUtil
         ManagerFactory::getAttLogManager()->createAttLog($list);
 
         if ($result === 0) {
-            (new MarcacionesServices())->registrarMarcaciones($list);
+            (new \App\Services\AmaxoniaMarcacionesService())->registrarMarcaciones($list);
             Log::info("attlog size: " . count($list));
         }
 

@@ -10,6 +10,7 @@ use App\Http\Controllers\ZKTeco\ProFaceX\info;
 use App\Http\Controllers\ZKTeco\ProFaceX\infoDatas;
 use App\Services\ZKTeco\ProFaceX\Constants;
 use App\Services\ZKTeco\ProFaceX\Manager\ManagerFactory;
+use App\Services\DatabaseSwitchService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -22,9 +23,18 @@ class DownloadProcessController extends Controller
     {
         $info = $request->input('INFO');
         $devSn = $request->input('SN');
+        $codEmpresa = $request->get('cod_empresa'); // Obtener del request (configurado por middleware)
+
+        Log::info("getRequest - SN: {$devSn}, cod_empresa: {$codEmpresa}");
 
         /**return when device serial number exception*/
         if (is_null($devSn) || empty($devSn)) {
+            return response('error')->header('Content-Type', 'text/plain');
+        }
+
+        // Verificar si hay empresa configurada (por middleware)
+        if (!DatabaseSwitchService::hayEmpresaConfigurada()) {
+            Log::warning("No hay empresa configurada en getRequest");
             return response('error')->header('Content-Type', 'text/plain');
         }
 
@@ -83,6 +93,15 @@ class DownloadProcessController extends Controller
         $response = new Response();
         $response->header('Content-Type', 'text/plain');
         $deviceSn = $request->input('SN');
+        $codEmpresa = $request->get('cod_empresa'); // Obtener del request (configurado por middleware)
+
+        Log::info("postDeviceCmd - SN: {$deviceSn}, cod_empresa: {$codEmpresa}");
+
+        // Verificar si hay empresa configurada (por middleware)
+        if (!DatabaseSwitchService::hayEmpresaConfigurada()) {
+            Log::warning("No hay empresa configurada en postDeviceCmd");
+            return response('error')->header('Content-Type', 'text/plain');
+        }
 
 
         try {
