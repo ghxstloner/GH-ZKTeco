@@ -9,22 +9,37 @@ use App\Http\Controllers\ZKTeco\ProFaceX\DownloadProcessController;
 |--------------------------------------------------------------------------
 | API Routes - ZKTeco & Marcaciones Amaxonia
 |--------------------------------------------------------------------------
+|
+| Estas rutas son para la comunicación "stateless" (sin estado), ideal
+| para la comunicación con dispositivos externos como los biométricos.
+| No tienen protección CSRF, a diferencia de las rutas en web.php.
+|
 */
 
 // Rutas con código de empresa (multi-tenancy)
+// El dispositivo debe estar configurado para apuntar a: https://dominio.com/api/{codigo}
 Route::group(['prefix' => '{codigo}', 'where' => ['codigo' => '[0-9]+'], 'middleware' => \App\Http\Middleware\EmpresaMiddleware::class], function () {
 
-    // Rutas para dispositivos ZKTeco con empresa
+    // Rutas para dispositivos ZKTeco (protocolo Push)
     Route::prefix('iclock')->group(function () {
+
+        // Rutas para que el dispositivo SUBA información al servidor (marcaciones, estado, etc.)
         Route::get('/cdata', [UploadProcessController::class, 'getCdata']);
         Route::post('/cdata', [UploadProcessController::class, 'postCdata']);
-        Route::get('/devicecmd', [DownloadProcessController::class, 'getRequest']);
+
+        // --- RUTAS DE COMANDOS CORREGIDAS ---
+
+        // 1. El dispositivo PREGUNTA por nuevos comandos pendientes en esta ruta.
+        //    (Corregido de /devicecmd a /getrequest)
+        Route::get('/getrequest', [DownloadProcessController::class, 'getRequest']);
+
+        // 2. El dispositivo INFORMA el resultado de los comandos que ejecutó en esta ruta.
         Route::post('/devicecmd', [DownloadProcessController::class, 'postDeviceCmd']);
     });
 
 });
 
-// Ruta de salud del sistema
+// Ruta de salud del sistema (no requiere código de empresa)
 Route::get('/health', function () {
     return response()->json([
         'status' => 'ok',
