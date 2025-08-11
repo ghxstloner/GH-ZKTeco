@@ -2,7 +2,6 @@
 
 namespace App\Services\ZKTeco\ProFaceX;
 
-use App\Services\MarcacionesServices;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
@@ -564,7 +563,12 @@ class DataParseUtil
         ManagerFactory::getAttLogManager()->createAttLog($list);
 
         if ($result === 0) {
-            (new \App\Services\AmaxoniaMarcacionesService())->registrarMarcaciones($list);
+            foreach ($list as $log) {
+                \App\Services\AmaxoniaMarcacionService::procesarMarcacion([
+                    'pin' => $log->USER_PIN,
+                    'fecha_hora' => $log->VERIFY_TIME,
+                ]);
+            }
             Log::info("attlog size: " . count($list));
         }
 

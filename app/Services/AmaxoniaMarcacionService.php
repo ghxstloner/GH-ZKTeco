@@ -14,72 +14,226 @@ class AmaxoniaMarcacionService
     public static function procesarMarcacion($datos)
     {
         try {
-            // Verificar si hay empresa configurada
             if (!DatabaseSwitchService::hayEmpresaConfigurada()) {
-                throw new \Exception("No hay empresa configurada");
+                throw new \Exception('No hay empresa configurada');
             }
 
             $empresa = DatabaseSwitchService::getEmpresaActual();
-            $conexion = DatabaseSwitchService::getConexionEmpresa();
+            $db = DatabaseSwitchService::getConexionEmpresa();
 
-            Log::info("Procesando marcación para empresa: {$empresa['nombre']} - BD: {$empresa['bd']}");
-
-            // Validar datos requeridos
+            // Validación mínima
             if (empty($datos['pin']) || empty($datos['fecha_hora'])) {
-                throw new \Exception("Datos de marcación incompletos");
+                throw new \Exception('Datos de marcación incompletos');
             }
 
-            $pin = $datos['pin'];
-            $fechaHora = $datos['fecha_hora'];
-            $tipo = $datos['tipo'] ?? 'E'; // E=Entrada, S=Salida
-            $dispositivo = $datos['dispositivo'] ?? 'APP_MOVIL';
+            $pinIngresado = (string)$datos['pin'];
+            $fechaHoraOriginal = Carbon::parse($datos['fecha_hora']);
+            $fecha = $fechaHoraOriginal->format('Y-m-d');
+            $hora = $fechaHoraOriginal->format('H:i:s');
 
-            // Convertir fecha a formato de Amaxonia
-            $fecha = Carbon::parse($fechaHora)->format('Y-m-d');
-            $hora = Carbon::parse($fechaHora)->format('H:i:s');
+            // 1) Tipo de marcación de la empresa
+            $tipoEmpresa = (string)($db->table('nomempresa')->value('tipo_empresa') ?? '0');
 
-            // Verificar si el empleado existe
-            $empleado = $conexion->table('empleados')
-                ->where('pin', $pin)
-                ->where('activo', 1)
+            // 2) Buscar colaborador por ficha (fallback por cédula)
+            $empleado = $db->table('nompersonal as n')
+                ->leftJoin('proyectos as p', 'p.idProyecto', '=', 'n.proyecto')
+                ->select(
+                    'n.personal_id',
+                    'n.ficha',
+                    'n.cedula',
+                    'n.apenom',
+                    'n.estado',
+                    'n.proyecto',
+                    'n.tipnom',
+                    'n.codnivel1',
+                    'p.idDispositivo',
+                    'p.lat',
+                    'p.lng',
+                    'p.descripcionCorta as puestotrabajo'
+                )
+                ->where(function ($q) use ($pinIngresado) {
+                    $q->where('n.ficha', $pinIngresado)
+                      ->orWhere('n.cedula', $pinIngresado);
+                })
                 ->first();
 
             if (!$empleado) {
-                throw new \Exception("Empleado con PIN {$pin} no encontrado o inactivo");
+                throw new \Exception("Colaborador no encontrado para PIN/Documento {$pinIngresado}");
             }
 
-            // Insertar marcación en la tabla correspondiente
-            $marcacionId = $conexion->table('marcaciones')->insertGetId([
-                'cod_empleado' => $empleado->codigo,
+            if (!in_array($empleado->estado, ['Activo', 'REGULAR'])) {
+                throw new \Exception('El colaborador se encuentra en estado: ' . $empleado->estado);
+            }
+
+            $ficha = $empleado->ficha;
+            $turno = $db->table('nomcalendarios_personal')
+                ->where('ficha', $ficha)
+                ->where('fecha', $fecha)
+                ->value('turno_id');
+
+            // 3) Encabezado del día (reloj_encabezado)
+            $codEncabezado = $db->table('reloj_encabezado')
+                ->whereRaw('? between fecha_ini and fecha_fin', [$fecha])
+                ->value('cod_enca');
+
+            if (empty($codEncabezado)) {
+                $codEncabezado = $db->table('reloj_encabezado')->insertGetId([
+                    'fecha_reg' => $fecha,
+                    'fecha_ini' => $fecha,
+                    'fecha_fin' => $fecha,
+                    'status' => 'Pendiente',
+                    'usuario_creacion' => 'admin',
+                    'usuario_edicion' => 'admin',
+                    'fecha_edicion' => now(),
+                    'usuario_preaprobacion' => null,
+                    'fecha_preaprobacion' => null,
+                    'usuario_aprobacion' => '',
+                    'fecha_aprobacion' => '0000-00-00 00:00:00',
+                    'tipo_nomina' => $empleado->tipnom,
+                ]);
+            }
+
+            // 4) Buscar detalle del día (reloj_detalle)
+            $detalle = $db->table('reloj_detalle')
+                ->select('id', 'entrada', 'salmuerzo', 'ealmuerzo', 'salida')
+                ->where('ficha', $ficha)
+                ->where('fecha', $fecha)
+                ->first();
+
+            // 5) Insertar en reloj_marcaciones (log simple)
+            $urlGmap = null;
+            if (!empty($empleado->lat) && !empty($empleado->lng)) {
+                $urlGmap = 'https://www.google.es/maps/place/' . $empleado->lat . ',' . $empleado->lng;
+            }
+
+            $db->beginTransaction();
+
+            $db->table('reloj_marcaciones')->insert([
+                'id_empleado' => $empleado->personal_id,
+                'ficha_empleado' => $ficha,
                 'fecha' => $fecha,
                 'hora' => $hora,
-                'tipo' => $tipo,
-                'dispositivo' => $dispositivo,
-                'fecha_creacion' => now(),
-                'ip_origen' => request()->ip()
+                'dispositivo' => $empleado->idDispositivo ?? $datos['dispositivo'] ?? 'ZKTECO',
+                'tipo' => $tipoEmpresa,
+                'estatus' => 0,
+                'lat' => $empleado->lat,
+                'lng' => $empleado->lng,
+                'url_gmap' => $urlGmap,
             ]);
 
-            Log::info("Marcación procesada exitosamente - ID: {$marcacionId}, Empleado: {$empleado->codigo}, Fecha: {$fecha}, Hora: {$hora}");
+            // 6) Insertar/Actualizar reloj_detalle aplicando la lógica REAL
+            if (!$detalle) {
+                // Insertar entrada
+                $db->table('reloj_detalle')->insert([
+                    'id_encabezado' => $codEncabezado,
+                    'ficha' => $ficha,
+                    'fecha' => $fecha,
+                    'entrada' => $hora,
+                    'salmuerzo' => '00:00',
+                    'ealmuerzo' => '00:00',
+                    'salida' => '00:00',
+                    'ordinaria' => '00:00',
+                    'extra' => '00:00',
+                    'extraext' => '00:00',
+                    'extranoc' => '00:00',
+                    'extraextnoc' => '00:00',
+                    'domingo' => '00:00',
+                    'tardanza' => '00:00',
+                    'nacional' => '00:00',
+                    'extranac' => '00:00',
+                    'extranocnac' => '00:00',
+                    'descextra1' => '00:00',
+                    'mixtodiurna' => '00:00',
+                    'mixtonoc' => '00:00',
+                    'mixtoextdiurna' => '00:00',
+                    'mixtoextnoc' => '00:00',
+                    'dialibre' => '00:00',
+                    'emergencia' => '00:00',
+                    'descansoincompleto' => '00:00',
+                    'marcacion_disp_id' => $empleado->idDispositivo ?? null,
+                    'ent_emer' => '00:00',
+                    'sal_emer' => '00:00',
+                    'salida_diasiguiente' => '',
+                    'observacion' => '',
+                    'hora_inicio' => '00:00',
+                    'estatus' => 0,
+                    'tarea' => '00:00',
+                    'lluvia' => '00:00',
+                    'paralizacion_lluvia' => '00:00',
+                    'altura_menor' => '00:00',
+                    'altura_mayor' => '00:00',
+                    'profundidad' => '00:00',
+                    'tunel' => '00:00',
+                    'martillo' => '00:00',
+                    'rastrilleo' => '00:00',
+                    'otras' => '00:00',
+                    'descanso_contrato' => '00:00',
+                    'capataz' => 0,
+                    'turno' => $turno,
+                    'lat' => $empleado->lat,
+                    'lng' => $empleado->lng,
+                ]);
 
-            return [
-                'success' => true,
-                'message' => 'Marcación procesada exitosamente',
-                'marcacion_id' => $marcacionId,
-                'empleado' => [
-                    'codigo' => $empleado->codigo,
-                    'nombre' => $empleado->nombre,
-                    'pin' => $empleado->pin
-                ],
-                'marcacion' => [
+                // Bitácora
+                $db->table('ca_reloj_registros')->insert([
+                    'ficha' => $ficha,
+                    'fecha_registro' => $fecha,
                     'fecha' => $fecha,
                     'hora' => $hora,
-                    'tipo' => $tipo,
-                    'dispositivo' => $dispositivo
-                ]
-            ];
+                    'tipo_registro' => 'act_marc',
+                    'turno_id' => $turno,
+                    'id_proyecto' => $empleado->proyecto,
+                    'latitud' => $empleado->lat,
+                    'longitud' => $empleado->lng,
+                    'fecha_creacion' => now(),
+                ]);
+            } else {
+                // Actualizar el campo correspondiente
+                $campoActualizar = null;
+                if ($tipoEmpresa === '0') {
+                    $campoActualizar = empty($detalle->entrada) || $detalle->entrada === '00:00:00' ? 'entrada' : 'salida';
+                } else {
+                    if (empty($detalle->entrada) || $detalle->entrada === '00:00:00') {
+                        $campoActualizar = 'entrada';
+                    } elseif (empty($detalle->salmuerzo) || $detalle->salmuerzo === '00:00:00') {
+                        $campoActualizar = 'salmuerzo';
+                    } elseif (empty($detalle->ealmuerzo) || $detalle->ealmuerzo === '00:00:00') {
+                        $campoActualizar = 'ealmuerzo';
+                    } else {
+                        $campoActualizar = 'salida';
+                    }
+                }
 
+                $db->table('reloj_detalle')
+                    ->where('id', $detalle->id)
+                    ->update([$campoActualizar => $hora]);
+
+                // Bitácora
+                $db->table('ca_reloj_registros')->insert([
+                    'ficha' => $ficha,
+                    'fecha_registro' => $fecha,
+                    'fecha' => $fecha,
+                    'hora' => $hora,
+                    'tipo_registro' => 'act_marc',
+                    'turno_id' => $turno,
+                    'id_proyecto' => $empleado->proyecto,
+                    'latitud' => $empleado->lat,
+                    'longitud' => $empleado->lng,
+                    'fecha_creacion' => now(),
+                ]);
+            }
+
+            $db->commit();
+
+            Log::info("Marcación registrada para {$empresa['nombre']} | ficha={$ficha} | fecha={$fecha} | hora={$hora}");
+            return ['success' => true];
         } catch (\Exception $e) {
-            Log::error("Error procesando marcación: " . $e->getMessage());
+            try {
+                DatabaseSwitchService::getConexionEmpresa()->rollBack();
+            } catch (\Throwable $t) {
+                // ignorar si no hay transacción abierta
+            }
+            Log::error('Error procesando marcación: ' . $e->getMessage());
             throw $e;
         }
     }
