@@ -406,30 +406,18 @@ class UploadProcessController extends Controller
     {
         $sb = Str::of("GET OPTION FROM: ")->append($devInfo->DEVICE_SN)->append("\n");
 
-        $verComp = -1;
-        try {
-            $verComp = PushUtil::compareVersion($devInfo->PUSH_VERSION, "2.0.0");
-        } catch (\Exception $e) {
-            Log::error($e->getTraceAsString());
-        }
+        // ===================================================================
+        // CORRECCIÓN: Se fuerza el uso del formato simple de TransFlag
+        // para máxima compatibilidad con firmwares como ZAM70-NF24HA.
+        // ===================================================================
 
-        if ($verComp >= 0) {
-            $sb = Str::of($sb)->append("ATTLOGStamp=")->append($devInfo->LOG_STAMP)->append("\n");
-            $sb = Str::of($sb)->append("OPERLOGStamp=")->append($devInfo->OP_LOG_STAMP)->append("\n");
-            $sb = Str::of($sb)->append("ATTPHOTOStamp=")->append($devInfo->PHOTO_STAMP)->append("\n");
-            $sb = Str::of($sb)->append("BIODATAStamp=")->append($devInfo->bioData_Stamp)->append("\n");
-            $sb = Str::of($sb)->append("IDCARDStamp=")->append($devInfo->idCard_Stamp)->append("\n");
-            $sb = Str::of($sb)->append("ERRORLOGStamp=")->append($devInfo->errorLog_Stamp)->append("\n");
-            $sb = Str::of($sb)->append("TransFlag=TransData AttLog\tOpLog\tAttPhoto\tEnrollUser\tChgUser\tEnrollFP\tChgFP\tFPImag\tFACE\tUserPic\tBioPhoto\n");
-        } else {
-            $sb = Str::of($sb)->append("Stamp=")->append($devInfo->LOG_STAMP)->append("\n");
-            $sb = Str::of($sb)->append("OpStamp=")->append($devInfo->OP_LOG_STAMP)->append("\n");
-            $sb = Str::of($sb)->append("PhotoStamp=")->append($devInfo->PHOTO_STAMP)->append("\n");
-            $sb = Str::of($sb)->append("BioDataStamp=")->append($devInfo->bioData_Stamp)->append("\n");
-            $sb = Str::of($sb)->append("IdCardStamp=")->append($devInfo->idCard_Stamp)->append("\n");
-            $sb = Str::of($sb)->append("ErrorLogStamp=")->append($devInfo->errorLog_Stamp)->append("\n");
-            $sb = Str::of($sb)->append("TransFlag=111111111111\n");
-        }
+        // Se usan los nombres de Stamp más antiguos para asegurar compatibilidad.
+        $sb = Str::of($sb)->append("Stamp=")->append($devInfo->LOG_STAMP)->append("\n");
+        $sb = Str::of($sb)->append("OpStamp=")->append($devInfo->OP_LOG_STAMP)->append("\n");
+        $sb = Str::of($sb)->append("PhotoStamp=")->append($devInfo->PHOTO_STAMP)->append("\n");
+
+        // Se usa el formato universal que todos los dispositivos entienden.
+        $sb = Str::of($sb)->append("TransFlag=111111111111\n");
 
         $sb = Str::of($sb)->append("ErrorDelay=60\n");
         $sb = Str::of($sb)->append("Delay=30\n");
@@ -446,11 +434,8 @@ class UploadProcessController extends Controller
 
         $sb = Str::of($sb)->append("TimeZone=")->append($timeZone)->append("\n");
 
-        // ===================================================================
-        // AQUÍ ESTÁ LA LÍNEA DE LOG QUE AÑADIMOS PARA DEPURAR
-        // ===================================================================
+        // Log para verificar la nueva respuesta
         Log::info("Respuesta OPTIONS para {$devInfo->DEVICE_SN}: \n" . $sb->toString());
-        // ===================================================================
 
         return Str::of($sb)->toString();
     }
