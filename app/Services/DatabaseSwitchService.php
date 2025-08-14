@@ -65,8 +65,6 @@ class DatabaseSwitchService
             self::$empresaActual = $empresa;
             self::$conexionConfigurada = true;
 
-            Log::info("Conexión configurada para empresa: {$empresa['nombre']} - BD: {$empresa['bd']}");
-
             return $empresa;
 
         } catch (\Exception $e) {

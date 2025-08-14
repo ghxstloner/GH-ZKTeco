@@ -30,8 +30,6 @@ class EmpresaMiddleware
                 // Agregar el código de empresa al request para uso posterior
                 $request->merge(['cod_empresa' => $codEmpresa]);
 
-                Log::info("Empresa configurada en middleware: {$codEmpresa}");
-
             } catch (\Exception $e) {
                 Log::error("Error configurando empresa en middleware: " . $e->getMessage());
                 return response('error', 400)->header('Content-Type', 'text/plain');

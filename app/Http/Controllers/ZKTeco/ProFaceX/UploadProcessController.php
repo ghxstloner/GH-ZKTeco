@@ -446,6 +446,12 @@ class UploadProcessController extends Controller
 
         $sb = Str::of($sb)->append("TimeZone=")->append($timeZone)->append("\n");
 
+        // ===================================================================
+        // AQUÍ ESTÁ LA LÍNEA DE LOG QUE AÑADIMOS PARA DEPURAR
+        // ===================================================================
+        Log::info("Respuesta OPTIONS para {$devInfo->DEVICE_SN}: \n" . $sb->toString());
+        // ===================================================================
+
         return Str::of($sb)->toString();
     }
 
