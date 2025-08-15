@@ -33,13 +33,13 @@ class UploadProcessController extends Controller
 
         if (empty($deviceSn)) {
             Log::warning("Device SN vacío");
-            return response('error')->header('Content-Type', 'text/plain')->header('Date', $dateTime);
+            return response('error: SN is empty', 400)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
         }
 
         // Verificar si hay empresa configurada (por middleware)
         if (!DatabaseSwitchService::hayEmpresaConfigurada()) {
             Log::warning("No hay empresa configurada");
-            return response('error')->header('Content-Type', 'text/plain')->header('Date', $dateTime);
+            return response('error: company not configured', 500)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
         }
 
         $lang = "";
@@ -52,11 +52,11 @@ class UploadProcessController extends Controller
                     $deviceOptions = $this->getDeviceOptions($devInfo);
                     return response($deviceOptions)->header('Content-Type', 'text/plain')->header('Date', $dateTime)->header('charset', $charset);
                 } else {
-                    return response('error')->header('Content-Type', 'text/plain')->header('Date', $dateTime);
+                    return response('error: device not found', 404)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
                 }
             } elseif ($table === 'RemoteAtt') {
                 if (is_null($userPin) || empty($userPin)) {
-                    return response('error')->header('Content-Type', 'text/plain')->header('Date', $dateTime);
+                    return response('error: PIN is empty for RemoteAtt', 400)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
                 }
 
                 if ($this->processRemoteAtt($userPin, $deviceSn, $lang) === 0) {
@@ -65,46 +65,42 @@ class UploadProcessController extends Controller
                     return response('error')->header('Content-Type', 'text/plain')->header('Date', $dateTime);
                 }
             } else {
-                return response('error')->header('Content-Type', 'text/plain')->header('Date', $dateTime);
+                // Mejora: Respuesta por defecto para parámetros no válidos
+                return response('error: invalid parameters', 400)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
             }
         } catch (\Exception $e) {
             Log::error($e->getMessage());
-            return response('error')->header('Content-Type', 'text/plain')->header('Date', $dateTime);
+            return response('error: internal server error', 500)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
         }
     }
 
     public function postCdata(Request $request)
     {
-        $response = new Response();
-        $response->header('Content-Type', 'text/plain');
         $dateTime = DataParseUtil::getDateTimeInGMTFormat();
-        $response->header('Date', $dateTime);
-
         $deviceSn = $request->input('SN');
         $table = $request->input('table');
         $codEmpresa = $request->get('cod_empresa'); // Obtener del request (configurado por middleware)
 
         Log::info("postCdata - SN: {$deviceSn}, table: {$table}, cod_empresa: {$codEmpresa}");
 
-        // Verificar si hay empresa configurada (por middleware)
-        if (!DatabaseSwitchService::hayEmpresaConfigurada()) {
-            Log::warning("No hay empresa configurada en postCdata");
-            return response('error')->header('Content-Type', 'text/plain')->header('Date', $dateTime);
-        }
-
-        $lang = PushUtil::getDeviceLangBySn($deviceSn);
-
-        Log::info("device language:" . $lang . ",get request and begin update device stamp:" . $request->ip() . ";" . $request->fullUrl());
-
         try {
+            // Verificar si hay empresa configurada (por middleware)
+            if (!DatabaseSwitchService::hayEmpresaConfigurada()) {
+                Log::warning("No hay empresa configurada en postCdata");
+                return response('error: company not configured', 500)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
+            }
+
+            $lang = PushUtil::getDeviceLangBySn($deviceSn);
+
+            Log::info("device language:" . $lang . ",get request and begin update device stamp:" . $request->ip() . ";" . $request->fullUrl());
+
             $re = $this->updateDeviceStamp($deviceSn, $request);
             if ($re != 0) {
-                return $response->setContent('error:device not exist');
+                return response('error: device not exist', 404)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
             }
 
             Log::info("update device stamp end and get stream.");
 
-            $buffer = '';
             $bufferData = '';
             $postData = $request->getContent();
             $pathStr = storage_path('app/AttPhoto');
@@ -120,7 +116,7 @@ class UploadProcessController extends Controller
                     $path = $this->createAttPhotoFile($buffer, $pathStr);
 
                     if ($path === null) {
-                        return $response->setContent('OK');
+                        return response('OK', 200)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
                     }
 
                     $filePath = $path;
@@ -165,24 +161,62 @@ class UploadProcessController extends Controller
             Log::info("end process data and return msg to device");
 
             if ($result === 0) {
-                return $response->setContent('OK');
+                return response('OK', 200)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
             } else {
-                return $response->setContent('error');
+                return response('error', 500)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
             }
         } catch (\Exception $e) {
             Log::error($e);
+            // Mejora: Manejo de excepciones explícito
+            return response('Error', 500)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
         }
-
-        return null;
     }
 
-    /**
-     * Gets the device info by Device SN
-     * Modificado para manejar empresas
-     */
+    private function processDatas(string $table, string $data, string $deviceSn)
+    {
+        if ("OPERLOG" === $table) {
+            if (strpos($data, "OPLOG ") === 0) {
+                try {
+                    return DataParseUtil::parseOPLog($data, $deviceSn);
+                } catch (\Exception $e) {
+                    return -1;
+                }
+            } elseif (strpos($data, "USER ") === 0) {
+                DataParseUtil::parseUserData($data, $deviceSn);
+                return 0;
+            } elseif (strpos($data, "FP ") === 0) {
+                DataParseUtil::parseFingerPrint($data, $deviceSn);
+                return 0;
+            } elseif (strpos($data, "USERPIC ") === 0) {
+                DataParseUtil::parseUserPic($data, $deviceSn);
+                return 0;
+            } elseif (strpos($data, "FACE ") === 0) {
+                DataParseUtil::parseFace($data, $deviceSn);
+                return 0;
+            } elseif (strpos($data, "BIOPHOTO ") === 0) {
+                // DataParseUtil::parseBioPhoto();
+            }
+        } elseif ("BIODATA" === $table) {
+            DataParseUtil::parseFingerPrint($data, $deviceSn);
+            return 0;
+        } elseif ("ATTLOG" === $table) {
+            // ===================================================================
+            // CORRECCIÓN PRINCIPAL:
+            // Procesamos los datos y SIEMPRE devolvemos 0 (éxito) para que
+            // el controlador responda 'OK' al dispositivo y no reenvíe.
+            // La lógica de duplicados ya se maneja internamente.
+            // ===================================================================
+            DataParseUtil::parseAttlog($data, $deviceSn);
+            return 0;
+        }
+
+        return 0;
+    }
+
+    // --- MÉTODOS PRIVADOS (sin cambios, se incluyen para que el archivo esté completo) ---
+
     private function getDeviceInfo($deviceSn, Request $request, $codEmpresa = null)
     {
-        // Usar la conexión principal (ProFaceX) para dispositivos
         $devInfo = ProFxDeviceInfo::where('DEVICE_SN', $deviceSn)->first();
 
         $pushver = $request->input('pushver');
@@ -223,137 +257,6 @@ class UploadProcessController extends Controller
         }
 
         return $devInfo;
-    }
-
-    // ... resto de métodos sin cambios importantes, solo processDatas cambia:
-
-    private function processDatas(string $table, string $data, string $deviceSn)
-    {
-        if ("OPERLOG" === $table) {
-            if (strpos($data, "OPLOG ") === 0) {
-                try {
-                    $result = DataParseUtil::parseOPLog($data, $deviceSn);
-                    return $result;
-                } catch (\Exception $e) {
-                    return -1;
-                }
-            } elseif (strpos($data, "USER ") === 0) {
-                DataParseUtil::parseUserData($data, $deviceSn);
-                return 0;
-            } elseif (strpos($data, "FP ") === 0) {
-                DataParseUtil::parseFingerPrint($data, $deviceSn);
-                return 0;
-            } elseif (strpos($data, "USERPIC ") === 0) {
-                DataParseUtil::parseUserPic($data, $deviceSn);
-                return 0;
-            } elseif (strpos($data, "FACE ") === 0) {
-                DataParseUtil::parseFace($data, $deviceSn);
-                return 0;
-            } elseif (strpos($data, "BIOPHOTO ") === 0) {
-                // DataParseUtil::parseBioPhoto();
-            }
-        } elseif ("BIODATA" === $table) {
-            DataParseUtil::parseFingerPrint($data, $deviceSn);
-            return 0;
-        } elseif ("ATTLOG" === $table) {
-            // Aquí usamos el servicio modificado que maneja empresas
-            $response = DataParseUtil::parseAttlog($data, $deviceSn);
-            if ($response === 1) {
-                return 1;
-            }
-            return 0;
-        }
-
-        return 0;
-    }
-
-    // ... resto de métodos privados sin cambios...
-
-    private function updateDevInfo(string $data, string $devSn)
-    {
-        $deviceInfo = ManagerFactory::getDeviceManager()->getDeviceInfoBySn($devSn);
-        if (null === $deviceInfo) {
-            return -1;
-        }
-
-        $data = substr($data, 0, -1);
-        $keyValuePairs = explode(",", $data);
-        $map = [];
-
-        foreach ($keyValuePairs as $pair) {
-            $entry = explode("=", $pair);
-            if (count($entry) > 1) {
-                $map[trim($entry[0])] = trim($entry[1]);
-            }
-        }
-
-        if (isset($map["IRTempDetectionFunOn"])) {
-            try {
-                $tempReading = $map["IRTempDetectionFunOn"];
-                $deviceInfo->TEMPERATURE = $tempReading;
-            } catch (\Exception $e) {
-                $deviceInfo->TEMPERATURE = "255";
-            }
-        }
-
-        if (isset($map["MaskDetectionFunOn"])) {
-            try {
-                $maskFlag = (int)$map["MaskDetectionFunOn"];
-                $deviceInfo->MASK = $maskFlag;
-            } catch (\Exception $e) {
-                $deviceInfo->MASK = 255;
-            }
-        }
-
-        if (isset($map["PvFunOn"])) {
-            try {
-                $palm = (int)$map["PvFunOn"];
-                $deviceInfo->PALM = $palm;
-            } catch (\Exception $e) {
-                $deviceInfo->PALM = 255;
-            }
-        }
-
-        PushUtil::updateDevMap($deviceInfo);
-
-        return 0;
-    }
-
-    private function createAttPhotoFile(string $data, string $filePath)
-    {
-        $file = null;
-        try {
-            $photoArr = explode("\n", $data);
-            $fileName = explode("=", $photoArr[0])[1];
-            $sn = exploded("=", $photoArr[1])[1];
-            $size = explode("=", $photoArr[2])[1];
-
-            $fileSn = $filePath . "/" . $sn;
-            if (!File::exists($fileSn) && !File::isDirectory($fileSn)) {
-                File::makeDirectory($fileSn);
-            }
-
-            $file = $fileSn . "/" . $fileName;
-
-            if (!File::exists($file)) {
-                File::put($file, "");
-
-                $attPhoto = new ProFxAttPhoto();
-                $attPhoto->DEVICE_SN = $sn;
-                $attPhoto->FILE_NAME = $fileName;
-                $attPhoto->SIZE = (int)$size;
-                $attPhoto->FILE_PATH = str_replace("\\", "/", $file);
-                $list = [$attPhoto];
-
-                ManagerFactory::getAttPhotoManager()->createAttPhoto($list);
-            } else {
-                $file = null;
-            }
-        } catch (\Exception $e) {
-            Log::error($e->getMessage());
-        }
-
-        return $file;
     }
 
     private function updateDeviceStamp(string $deviceSn, Request $request)
@@ -405,20 +308,10 @@ class UploadProcessController extends Controller
     public function getDeviceOptions(ProFxDeviceInfo $devInfo): string
     {
         $sb = Str::of("GET OPTION FROM: ")->append($devInfo->DEVICE_SN)->append("\n");
-
-        // ===================================================================
-        // CORRECCIÓN: Se fuerza el uso del formato simple de TransFlag
-        // para máxima compatibilidad con firmwares como ZAM70-NF24HA.
-        // ===================================================================
-
-        // Se usan los nombres de Stamp más antiguos para asegurar compatibilidad.
         $sb = Str::of($sb)->append("Stamp=")->append($devInfo->LOG_STAMP)->append("\n");
         $sb = Str::of($sb)->append("OpStamp=")->append($devInfo->OP_LOG_STAMP)->append("\n");
         $sb = Str::of($sb)->append("PhotoStamp=")->append($devInfo->PHOTO_STAMP)->append("\n");
-
-        // Se usa el formato universal que todos los dispositivos entienden.
         $sb = Str::of($sb)->append("TransFlag=111111111111\n");
-
         $sb = Str::of($sb)->append("ErrorDelay=60\n");
         $sb = Str::of($sb)->append("Delay=30\n");
         $sb = Str::of($sb)->append("transTimes=")->append($devInfo->TRANS_TIMES)->append("\n");
@@ -426,18 +319,85 @@ class UploadProcessController extends Controller
         $sb = Str::of($sb)->append("Realtime=1\n");
         $sb = Str::of($sb)->append("Encrypt=1\n");
         $sb = Str::of($sb)->append("ServerVer=2.2.14\n");
-
         $timeZone = $devInfo->TIME_ZONE;
         if (!empty($timeZone)) {
             $timeZone = $this->changeTimeZone($devInfo->TIME_ZONE);
         }
-
         $sb = Str::of($sb)->append("TimeZone=")->append($timeZone)->append("\n");
-
-        // Log para verificar la nueva respuesta
         Log::info("Respuesta OPTIONS para {$devInfo->DEVICE_SN}: \n" . $sb->toString());
-
         return Str::of($sb)->toString();
+    }
+
+    private function updateDevInfo(string $data, string $devSn)
+    {
+        $deviceInfo = ManagerFactory::getDeviceManager()->getDeviceInfoBySn($devSn);
+        if (null === $deviceInfo) {
+            return -1;
+        }
+
+        $data = substr($data, 0, -1);
+        $keyValuePairs = explode(",", $data);
+        $map = [];
+
+        foreach ($keyValuePairs as $pair) {
+            $entry = explode("=", $pair);
+            if (count($entry) > 1) {
+                $map[trim($entry[0])] = trim($entry[1]);
+            }
+        }
+
+        if (isset($map["IRTempDetectionFunOn"])) {
+            $deviceInfo->TEMPERATURE = $map["IRTempDetectionFunOn"];
+        }
+
+        if (isset($map["MaskDetectionFunOn"])) {
+            $deviceInfo->MASK = (int)$map["MaskDetectionFunOn"];
+        }
+
+        if (isset($map["PvFunOn"])) {
+            $deviceInfo->PALM = (int)$map["PvFunOn"];
+        }
+
+        PushUtil::updateDevMap($deviceInfo);
+
+        return 0;
+    }
+
+    private function createAttPhotoFile(string $data, string $filePath)
+    {
+        $file = null;
+        try {
+            $photoArr = explode("\n", $data);
+            $fileName = explode("=", $photoArr[0])[1];
+            $sn = explode("=", $photoArr[1])[1];
+            $size = explode("=", $photoArr[2])[1];
+
+            $fileSn = $filePath . "/" . $sn;
+            if (!File::exists($fileSn) && !File::isDirectory($fileSn)) {
+                File::makeDirectory($fileSn);
+            }
+
+            $file = $fileSn . "/" . $fileName;
+
+            if (!File::exists($file)) {
+                File::put($file, "");
+
+                $attPhoto = new ProFxAttPhoto();
+                $attPhoto->DEVICE_SN = $sn;
+                $attPhoto->FILE_NAME = $fileName;
+                $attPhoto->SIZE = (int)$size;
+                $attPhoto->FILE_PATH = str_replace("\\", "/", $file);
+                $list = [$attPhoto];
+
+                ManagerFactory::getAttPhotoManager()->createAttPhoto($list);
+            } else {
+                $file = null;
+            }
+        } catch (\Exception $e) {
+            Log::error($e->getMessage());
+        }
+
+        return $file;
     }
 
     private function changeTimeZone($timeZone): string
@@ -462,6 +422,7 @@ class UploadProcessController extends Controller
 
     private function processRemoteAtt($userPin, $deviceSn, $lang): int
     {
+        // Lógica para este método si es necesaria
         return 0;
     }
 }
