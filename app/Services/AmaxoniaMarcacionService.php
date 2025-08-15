@@ -90,6 +90,10 @@ class AmaxoniaMarcacionService
                     'usuario_aprobacion' => '',
                     'fecha_aprobacion' => '0000-00-00 00:00:00',
                     'tipo_nomina' => $empleado->tipnom,
+                    'usuario_despreaprobacion' => '',
+                    'fecha_despreaprobacion' => '0000-00-00 00:00:00',
+                    'usuario_desaprobacion' => '',
+                    'fecha_desaprobacion' => '0000-00-00 00:00:00',
                 ]);
             }
 
@@ -101,7 +105,7 @@ class AmaxoniaMarcacionService
                 ->first();
 
             // 5) Insertar en reloj_marcaciones (log simple)
-            $urlGmap = null;
+            $urlGmap = '';
             if (!empty($empleado->lat) && !empty($empleado->lng)) {
                 $urlGmap = 'https://www.google.es/maps/place/' . $empleado->lat . ',' . $empleado->lng;
             }
@@ -113,11 +117,11 @@ class AmaxoniaMarcacionService
                 'ficha_empleado' => $ficha,
                 'fecha' => $fecha,
                 'hora' => $hora,
-                'dispositivo' => $empleado->idDispositivo ?? $datos['dispositivo'] ?? 'ZKTECO',
-                'tipo' => $tipoEmpresa,
+                'dispositivo' => $empleado->idDispositivo ?? $datos['dispositivo'] ?? 1,
+                'tipo' => (int)$tipoEmpresa,
                 'estatus' => 0,
-                'lat' => $empleado->lat,
-                'lng' => $empleado->lng,
+                'lat' => (string)$empleado->lat,
+                'lng' => (string)$empleado->lng,
                 'url_gmap' => $urlGmap,
             ]);
 
@@ -153,8 +157,8 @@ class AmaxoniaMarcacionService
                     'marcacion_disp_id' => $empleado->idDispositivo ?? null,
                     'ent_emer' => '00:00',
                     'sal_emer' => '00:00',
-                    'salida_diasiguiente' => '',
-                    'observacion' => '',
+                    'salida_diasiguiente' => '00:00',
+                    'observacion' => null,
                     'hora_inicio' => '00:00',
                     'estatus' => 0,
                     'tarea' => '00:00',
@@ -192,20 +196,6 @@ class AmaxoniaMarcacionService
                     'horas_acumuladas' => '00:00',
                     'turno_libre_id' => 0,
                 ]);
-
-                // Bitácora
-                $db->table('ca_reloj_registros')->insert([
-                    'ficha' => $ficha,
-                    'fecha_registro' => $fecha,
-                    'fecha' => $fecha,
-                    'hora' => $hora,
-                    'tipo_registro' => 'act_marc',
-                    'turno_id' => $turno,
-                    'id_proyecto' => $empleado->proyecto,
-                    'latitud' => $empleado->lat,
-                    'longitud' => $empleado->lng,
-                    'fecha_creacion' => now(),
-                ]);
             } else {
                 // Actualizar el campo correspondiente
                 $campoActualizar = null;
@@ -226,20 +216,6 @@ class AmaxoniaMarcacionService
                 $db->table('reloj_detalle')
                     ->where('id', $detalle->id)
                     ->update([$campoActualizar => $hora]);
-
-                // Bitácora
-                $db->table('ca_reloj_registros')->insert([
-                    'ficha' => $ficha,
-                    'fecha_registro' => $fecha,
-                    'fecha' => $fecha,
-                    'hora' => $hora,
-                    'tipo_registro' => 'act_marc',
-                    'turno_id' => $turno,
-                    'id_proyecto' => $empleado->proyecto,
-                    'latitud' => $empleado->lat,
-                    'longitud' => $empleado->lng,
-                    'fecha_creacion' => now(),
-                ]);
             }
 
             $db->commit();
