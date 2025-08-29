@@ -293,6 +293,7 @@ class AmaxoniaMarcacionService
             // Obtener registros no procesados
             $registrosPendientes = $db->table('profacex_att_log')
                 ->where('procesado', 0)
+                ->orderBy('VERIFY_TIME', 'asc')
                 ->get();
 
             $procesados = 0;
@@ -330,6 +331,82 @@ class AmaxoniaMarcacionService
 
         } catch (\Exception $e) {
             Log::error('Error procesando registros pendientes: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * Procesa TODOS los registros existentes en profacex_att_log (para migración inicial)
+     * Este método debe ejecutarse UNA SOLA VEZ después de agregar la columna 'procesado'
+     */
+    public static function procesarRegistrosExistentesCompleto()
+    {
+        try {
+            if (!DatabaseSwitchService::hayEmpresaConfigurada()) {
+                throw new \Exception('No hay empresa configurada');
+            }
+
+            $db = DatabaseSwitchService::getConexionEmpresa();
+            
+            // Obtener TODOS los registros (sin filtrar por procesado)
+            $todosLosRegistros = $db->table('profacex_att_log')
+                ->orderBy('VERIFY_TIME', 'asc')
+                ->get();
+
+            $procesados = 0;
+            $errores = 0;
+            $yaExistian = 0;
+
+            foreach ($todosLosRegistros as $registro) {
+                try {
+                    // Verificar si ya existe en reloj_detalle para este empleado y fecha
+                    $ficha = $registro->USER_PIN;
+                    $fecha = date('Y-m-d', strtotime($registro->VERIFY_TIME));
+                    
+                    $existeEnDetalle = $db->table('reloj_detalle')
+                        ->where('ficha', $ficha)
+                        ->where('fecha', $fecha)
+                        ->exists();
+
+                    if ($existeEnDetalle) {
+                        // Solo marcar como procesado, no volver a procesar
+                        $db->table('profacex_att_log')
+                            ->where('ATT_LOG_ID', $registro->ATT_LOG_ID)
+                            ->update(['procesado' => 1]);
+                        $yaExistian++;
+                    } else {
+                        // Procesar la marcación normalmente
+                        self::procesarMarcacion([
+                            'pin' => $registro->USER_PIN,
+                            'fecha_hora' => $registro->VERIFY_TIME,
+                        ]);
+
+                        // Marcar como procesado
+                        $db->table('profacex_att_log')
+                            ->where('ATT_LOG_ID', $registro->ATT_LOG_ID)
+                            ->update(['procesado' => 1]);
+
+                        $procesados++;
+                    }
+                    
+                } catch (\Exception $e) {
+                    Log::error("Error procesando registro completo {$registro->ATT_LOG_ID}: " . $e->getMessage());
+                    $errores++;
+                }
+            }
+
+            Log::info("Procesamiento completo terminado: {$procesados} nuevos procesados, {$yaExistian} ya existían, {$errores} errores");
+            
+            return [
+                'success' => true,
+                'procesados' => $procesados,
+                'yaExistian' => $yaExistian,
+                'errores' => $errores,
+                'total' => count($todosLosRegistros)
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Error procesando registros existentes completo: ' . $e->getMessage());
             throw $e;
         }
     }

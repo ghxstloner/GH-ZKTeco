@@ -546,12 +546,21 @@ class DataParseUtil
                 $devLog->OPERATE_TYPE_STR = $sb;
 
                 // Verificar si ya existe el registro en la tabla de staging
-                if (ProFxAttLog::where('USER_PIN', $log->USER_PIN)
-                        ->where('VERIFY_TIME', $log->VERIFY_TIME)
-                        ->where('DEVICE_SN', $log->DEVICE_SN)
-                        ->where('VERIFY_TYPE', $log->VERIFY_TYPE)->count() > 0) {
+                $existingRecord = ProFxAttLog::where('USER_PIN', $log->USER_PIN)
+                    ->where('VERIFY_TIME', $log->VERIFY_TIME)
+                    ->where('DEVICE_SN', $log->DEVICE_SN)
+                    ->where('VERIFY_TYPE', $log->VERIFY_TYPE)
+                    ->first();
+                    
+                if ($existingRecord) {
+                    // Si el registro existe pero no ha sido procesado, lo agregamos a la lista para procesamiento
+                    if ($existingRecord->procesado == 0) {
+                        // No agregar a la lista de nuevos registros, solo procesar los pendientes al final
+                        Log::info("Registro existente no procesado encontrado: " . print_r($log->toArray(), true));
+                    } else {
+                        Log::info("Registro ya procesado, omitiendo: " . print_r($log->toArray(), true));
+                    }
                     $result = 1;
-                    Log::info("Registro de marcacion duplicada: " . print_r($log->toArray(), true));
                     continue;
                 }
 
@@ -563,14 +572,12 @@ class DataParseUtil
         ManagerFactory::getDeviceLogManager()->addDeviceLog($devLoglist);
         ManagerFactory::getAttLogManager()->createAttLog($list);
 
-        // Procesar los registros pendientes usando el nuevo método optimizado
-        if ($result === 0 && count($list) > 0) {
-            try {
-                \App\Services\AmaxoniaMarcacionService::procesarRegistrosPendientes();
-                Log::info("attlog size: " . count($list));
-            } catch (\Exception $e) {
-                Log::error("Error procesando registros pendientes: " . $e->getMessage());
-            }
+        // Siempre procesar registros pendientes (independientemente de si hay nuevos registros)
+        try {
+            $resultadoProcesamiento = \App\Services\AmaxoniaMarcacionService::procesarRegistrosPendientes();
+            Log::info("Nuevos registros guardados: " . count($list) . " | Registros procesados: " . $resultadoProcesamiento['procesados'] . " | Errores: " . $resultadoProcesamiento['errores']);
+        } catch (\Exception $e) {
+            Log::error("Error procesando registros pendientes: " . $e->getMessage());
         }
 
         return $result;
