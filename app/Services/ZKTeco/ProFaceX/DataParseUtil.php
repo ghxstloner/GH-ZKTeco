@@ -545,6 +545,7 @@ class DataParseUtil
 
                 $devLog->OPERATE_TYPE_STR = $sb;
 
+                // Verificar si ya existe el registro en la tabla de staging
                 if (ProFxAttLog::where('USER_PIN', $log->USER_PIN)
                         ->where('VERIFY_TIME', $log->VERIFY_TIME)
                         ->where('DEVICE_SN', $log->DEVICE_SN)
@@ -562,14 +563,14 @@ class DataParseUtil
         ManagerFactory::getDeviceLogManager()->addDeviceLog($devLoglist);
         ManagerFactory::getAttLogManager()->createAttLog($list);
 
-        if ($result === 0) {
-            foreach ($list as $log) {
-                \App\Services\AmaxoniaMarcacionService::procesarMarcacion([
-                    'pin' => $log->USER_PIN,
-                    'fecha_hora' => $log->VERIFY_TIME,
-                ]);
+        // Procesar los registros pendientes usando el nuevo método optimizado
+        if ($result === 0 && count($list) > 0) {
+            try {
+                \App\Services\AmaxoniaMarcacionService::procesarRegistrosPendientes();
+                Log::info("attlog size: " . count($list));
+            } catch (\Exception $e) {
+                Log::error("Error procesando registros pendientes: " . $e->getMessage());
             }
-            Log::info("attlog size: " . count($list));
         }
 
         return $result;

@@ -120,8 +120,8 @@ class AmaxoniaMarcacionService
                 'dispositivo' => $empleado->idDispositivo ?? $datos['dispositivo'] ?? 1,
                 'tipo' => (int)$tipoEmpresa,
                 'estatus' => 0,
-                'lat' => (string)$empleado->lat,
-                'lng' => (string)$empleado->lng,
+                'lat' => (string)($empleado->lat ?? '0.0'),
+                'lng' => (string)($empleado->lng ?? '0.0'),
                 'url_gmap' => $urlGmap,
             ]);
 
@@ -174,8 +174,8 @@ class AmaxoniaMarcacionService
                     'descanso_contrato' => '00:00',
                     'capataz' => 0,
                     'turno' => $turno,
-                    'lat' => $empleado->lat,
-                    'lng' => $empleado->lng,
+                    'lat' => $empleado->lat ?? '0.0',
+                    'lng' => $empleado->lng ?? '0.0',
                     'horas_reales' => '00:00',
                     'horas_teoricas' => '00:00',
                     'mixtoextnocnac' => '00:00',
@@ -274,6 +274,62 @@ class AmaxoniaMarcacionService
 
         } catch (\Exception $e) {
             Log::error("Error obteniendo marcaciones: " . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * Procesa registros pendientes de profacex_att_log
+     */
+    public static function procesarRegistrosPendientes()
+    {
+        try {
+            if (!DatabaseSwitchService::hayEmpresaConfigurada()) {
+                throw new \Exception('No hay empresa configurada');
+            }
+
+            $db = DatabaseSwitchService::getConexionEmpresa();
+            
+            // Obtener registros no procesados
+            $registrosPendientes = $db->table('profacex_att_log')
+                ->where('procesado', 0)
+                ->get();
+
+            $procesados = 0;
+            $errores = 0;
+
+            foreach ($registrosPendientes as $registro) {
+                try {
+                    // Procesar la marcación
+                    self::procesarMarcacion([
+                        'pin' => $registro->USER_PIN,
+                        'fecha_hora' => $registro->VERIFY_TIME,
+                    ]);
+
+                    // Marcar como procesado
+                    $db->table('profacex_att_log')
+                        ->where('ATT_LOG_ID', $registro->ATT_LOG_ID)
+                        ->update(['procesado' => 1]);
+
+                    $procesados++;
+                    
+                } catch (\Exception $e) {
+                    Log::error("Error procesando registro {$registro->ATT_LOG_ID}: " . $e->getMessage());
+                    $errores++;
+                }
+            }
+
+            Log::info("Procesamiento completado: {$procesados} registros procesados, {$errores} errores");
+            
+            return [
+                'success' => true,
+                'procesados' => $procesados,
+                'errores' => $errores,
+                'total' => count($registrosPendientes)
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Error procesando registros pendientes: ' . $e->getMessage());
             throw $e;
         }
     }
