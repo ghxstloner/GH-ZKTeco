@@ -330,7 +330,6 @@ class AmaxoniaMarcacionService
                     $procesados++;
 
                 } catch (\Exception $e) {
-                    Log::error("Error procesando registro {$registro->ATT_LOG_ID}: " . $e->getMessage());
                     $errores++;
                 }
             }
@@ -345,7 +344,6 @@ class AmaxoniaMarcacionService
             ];
 
         } catch (\Exception $e) {
-            Log::error('Error procesando registros pendientes: ' . $e->getMessage());
             throw $e;
         }
     }
@@ -405,7 +403,6 @@ class AmaxoniaMarcacionService
                     }
 
                 } catch (\Exception $e) {
-                    Log::error("Error procesando registro completo {$registro->ATT_LOG_ID}: " . $e->getMessage());
                     $errores++;
                 }
             }
@@ -421,7 +418,6 @@ class AmaxoniaMarcacionService
             ];
 
         } catch (\Exception $e) {
-            Log::error('Error procesando registros existentes completo: ' . $e->getMessage());
             throw $e;
         }
     }
