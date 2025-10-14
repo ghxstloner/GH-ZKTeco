@@ -565,7 +565,6 @@ class DataParseUtil
         try {
             $resultadoProcesamiento = \App\Services\AmaxoniaMarcacionService::procesarRegistrosPendientes();
         } catch (\Exception $e) {
-            Log::error("Error procesando registros pendientes: " . $e->getMessage());
         }
 
         return $result;
