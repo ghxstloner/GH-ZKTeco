@@ -34,9 +34,6 @@ class AmaxoniaMarcacionService
             // 1) Tipo de marcación de la empresa
             $tipoEmpresa = (string)($db->table('nomempresa')->value('tipo_empresa') ?? '0');
 
-            // DEBUG: Verificar el valor real
-            Log::info("DEBUG tipo_empresa: valor=" . var_export($tipoEmpresa, true) . " tipo=" . gettype($tipoEmpresa));
-
             // 2) Buscar colaborador por ficha (fallback por cédula)
             $empleado = $db->table('nompersonal as n')
                 ->leftJoin('proyectos as p', 'p.idProyecto', '=', 'n.proyecto')
@@ -202,10 +199,6 @@ class AmaxoniaMarcacionService
             } else {
                 // Actualizar el campo correspondiente
                 $campoActualizar = null;
-
-                // DEBUG: Verificar la condición
-                Log::info("DEBUG condición: tipoEmpresa='{$tipoEmpresa}' === '0' = " . ($tipoEmpresa === '0' ? 'true' : 'false'));
-
                 if ($tipoEmpresa === '0') {
                     $campoActualizar = empty($detalle->entrada) || $detalle->entrada === '00:00:00' ? 'entrada' : 'salida';
                 } else {
@@ -219,6 +212,9 @@ class AmaxoniaMarcacionService
                         $campoActualizar = 'salida';
                     }
                 }
+
+                // DEBUG: Solo mostrar qué campo se actualiza
+                Log::info("DEBUG: Actualizando campo '{$campoActualizar}' para ficha {$ficha} tipo_empresa='{$tipoEmpresa}'");
 
                 $db->table('reloj_detalle')
                     ->where('id', $detalle->id)
