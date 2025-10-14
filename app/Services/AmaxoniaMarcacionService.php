@@ -110,6 +110,9 @@ class AmaxoniaMarcacionService
                 ->where('fecha', $fecha)
                 ->count();
 
+            // DEBUG: Mostrar conteo de marcaciones
+            Log::info("DEBUG: Marcaciones del día para ficha {$ficha}: {$marcacionesDelDia}");
+
 
             // 5) Insertar en reloj_marcaciones (log simple)
             $urlGmap = '';
@@ -134,6 +137,8 @@ class AmaxoniaMarcacionService
 
             // 6) Insertar/Actualizar reloj_detalle aplicando la lógica REAL
             if (!$detalle) {
+                // DEBUG: Insertando nuevo registro
+                Log::info("DEBUG: Insertando NUEVO registro en reloj_detalle para ficha {$ficha}");
                 // Insertar entrada
                 $db->table('reloj_detalle')->insert([
                     'id_encabezado' => $codEncabezado,
@@ -204,6 +209,8 @@ class AmaxoniaMarcacionService
                     'turno_libre_id' => 0,
                 ]);
             } else {
+                // DEBUG: Actualizando registro existente
+                Log::info("DEBUG: Actualizando registro EXISTENTE en reloj_detalle para ficha {$ficha}");
                 // Actualizar el campo correspondiente basado en el número de marcaciones
                 $campoActualizar = null;
                 if ($tipoEmpresa === '0') {
@@ -227,6 +234,8 @@ class AmaxoniaMarcacionService
                     }
                 }
 
+                // DEBUG: Mostrar qué campo se va a actualizar
+                Log::info("DEBUG: Actualizando campo '{$campoActualizar}' para ficha {$ficha} tipo_empresa='{$tipoEmpresa}' marcacion_num={$marcacionesDelDia}");
 
                 $db->table('reloj_detalle')
                     ->where('id', $detalle->id)
