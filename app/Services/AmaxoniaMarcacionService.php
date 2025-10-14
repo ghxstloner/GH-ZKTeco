@@ -104,6 +104,12 @@ class AmaxoniaMarcacionService
                 ->where('fecha', $fecha)
                 ->first();
 
+            // 4.1) Contar marcaciones del día para determinar el próximo campo
+            $marcacionesDelDia = $db->table('reloj_marcaciones')
+                ->where('ficha_empleado', $ficha)
+                ->where('fecha', $fecha)
+                ->count();
+
             // 5) Insertar en reloj_marcaciones (log simple)
             $urlGmap = '';
             if (!empty($empleado->lat) && !empty($empleado->lng)) {
@@ -197,24 +203,31 @@ class AmaxoniaMarcacionService
                     'turno_libre_id' => 0,
                 ]);
             } else {
-                // Actualizar el campo correspondiente
+                // Actualizar el campo correspondiente basado en el número de marcaciones
                 $campoActualizar = null;
                 if ($tipoEmpresa === '0') {
-                    $campoActualizar = empty($detalle->entrada) || $detalle->entrada === '00:00:00' ? 'entrada' : 'salida';
+                    // 2 marcaciones: entrada y salida
+                    $campoActualizar = ($marcacionesDelDia % 2 == 1) ? 'entrada' : 'salida';
                 } else {
-                    if (empty($detalle->entrada) || $detalle->entrada === '00:00:00') {
-                        $campoActualizar = 'entrada';
-                    } elseif (empty($detalle->salmuerzo) || $detalle->salmuerzo === '00:00:00') {
-                        $campoActualizar = 'salmuerzo';
-                    } elseif (empty($detalle->ealmuerzo) || $detalle->ealmuerzo === '00:00:00') {
-                        $campoActualizar = 'ealmuerzo';
-                    } else {
-                        $campoActualizar = 'salida';
+                    // 4 marcaciones: entrada, salmuerzo, ealmuerzo, salida
+                    switch ($marcacionesDelDia % 4) {
+                        case 1:
+                            $campoActualizar = 'entrada';
+                            break;
+                        case 2:
+                            $campoActualizar = 'salmuerzo';
+                            break;
+                        case 3:
+                            $campoActualizar = 'ealmuerzo';
+                            break;
+                        case 0:
+                            $campoActualizar = 'salida';
+                            break;
                     }
                 }
 
                 // DEBUG: Solo mostrar qué campo se actualiza
-                Log::info("DEBUG: Actualizando campo '{$campoActualizar}' para ficha {$ficha} tipo_empresa='{$tipoEmpresa}'");
+                Log::info("DEBUG: Actualizando campo '{$campoActualizar}' para ficha {$ficha} tipo_empresa='{$tipoEmpresa}' marcacion_num={$marcacionesDelDia}");
 
                 $db->table('reloj_detalle')
                     ->where('id', $detalle->id)
