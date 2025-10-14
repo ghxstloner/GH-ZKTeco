@@ -34,6 +34,9 @@ class AmaxoniaMarcacionService
             // 1) Tipo de marcación de la empresa
             $tipoEmpresa = (string)($db->table('nomempresa')->value('tipo_empresa') ?? '0');
 
+            // DEBUG: Verificar el valor real
+            Log::info("DEBUG tipo_empresa: valor=" . var_export($tipoEmpresa, true) . " tipo=" . gettype($tipoEmpresa));
+
             // 2) Buscar colaborador por ficha (fallback por cédula)
             $empleado = $db->table('nompersonal as n')
                 ->leftJoin('proyectos as p', 'p.idProyecto', '=', 'n.proyecto')
@@ -199,6 +202,10 @@ class AmaxoniaMarcacionService
             } else {
                 // Actualizar el campo correspondiente
                 $campoActualizar = null;
+
+                // DEBUG: Verificar la condición
+                Log::info("DEBUG condición: tipoEmpresa='{$tipoEmpresa}' === '0' = " . ($tipoEmpresa === '0' ? 'true' : 'false'));
+
                 if ($tipoEmpresa === '0') {
                     $campoActualizar = empty($detalle->entrada) || $detalle->entrada === '00:00:00' ? 'entrada' : 'salida';
                 } else {
@@ -289,7 +296,7 @@ class AmaxoniaMarcacionService
             }
 
             $db = DatabaseSwitchService::getConexionEmpresa();
-            
+
             // Obtener registros no procesados
             $registrosPendientes = $db->table('profacex_att_log')
                 ->where('procesado', 0)
@@ -313,7 +320,7 @@ class AmaxoniaMarcacionService
                         ->update(['procesado' => 1]);
 
                     $procesados++;
-                    
+
                 } catch (\Exception $e) {
                     Log::error("Error procesando registro {$registro->ATT_LOG_ID}: " . $e->getMessage());
                     $errores++;
@@ -321,7 +328,7 @@ class AmaxoniaMarcacionService
             }
 
             Log::info("Procesamiento completado: {$procesados} registros procesados, {$errores} errores");
-            
+
             return [
                 'success' => true,
                 'procesados' => $procesados,
@@ -347,7 +354,7 @@ class AmaxoniaMarcacionService
             }
 
             $db = DatabaseSwitchService::getConexionEmpresa();
-            
+
             // Obtener TODOS los registros (sin filtrar por procesado)
             $todosLosRegistros = $db->table('profacex_att_log')
                 ->orderBy('VERIFY_TIME', 'asc')
@@ -362,7 +369,7 @@ class AmaxoniaMarcacionService
                     // Verificar si ya existe en reloj_detalle para este empleado y fecha
                     $ficha = $registro->USER_PIN;
                     $fecha = date('Y-m-d', strtotime($registro->VERIFY_TIME));
-                    
+
                     $existeEnDetalle = $db->table('reloj_detalle')
                         ->where('ficha', $ficha)
                         ->where('fecha', $fecha)
@@ -388,7 +395,7 @@ class AmaxoniaMarcacionService
 
                         $procesados++;
                     }
-                    
+
                 } catch (\Exception $e) {
                     Log::error("Error procesando registro completo {$registro->ATT_LOG_ID}: " . $e->getMessage());
                     $errores++;
@@ -396,7 +403,7 @@ class AmaxoniaMarcacionService
             }
 
             Log::info("Procesamiento completo terminado: {$procesados} nuevos procesados, {$yaExistian} ya existían, {$errores} errores");
-            
+
             return [
                 'success' => true,
                 'procesados' => $procesados,
