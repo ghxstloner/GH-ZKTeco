@@ -104,16 +104,6 @@ class AmaxoniaMarcacionService
                 ->where('fecha', $fecha)
                 ->first();
 
-            // 4.1) Contar marcaciones del día para determinar el próximo campo
-            $marcacionesDelDia = $db->table('reloj_marcaciones')
-                ->where('ficha_empleado', $ficha)
-                ->where('fecha', $fecha)
-                ->count();
-
-            // DEBUG: Mostrar conteo de marcaciones
-            Log::info("DEBUG: Marcaciones del día para ficha {$ficha}: {$marcacionesDelDia}");
-
-
             // 5) Insertar en reloj_marcaciones (log simple)
             $urlGmap = '';
             if (!empty($empleado->lat) && !empty($empleado->lng)) {
@@ -135,10 +125,17 @@ class AmaxoniaMarcacionService
                 'url_gmap' => $urlGmap,
             ]);
 
-            // 6) Insertar/Actualizar reloj_detalle aplicando la lógica REAL
+            // 6) Contar marcaciones del día DESPUÉS de insertar la nueva marcación
+            $marcacionesDelDia = $db->table('reloj_marcaciones')
+                ->where('ficha_empleado', $ficha)
+                ->where('fecha', $fecha)
+                ->count();
+
+            // DEBUG: Mostrar conteo de marcaciones
+            Log::info("DEBUG: Marcaciones del día para ficha {$ficha}: {$marcacionesDelDia}");
+
+            // 7) Insertar/Actualizar reloj_detalle aplicando la lógica REAL
             if (!$detalle) {
-                // DEBUG: Insertando nuevo registro
-                Log::info("DEBUG: Insertando NUEVO registro en reloj_detalle para ficha {$ficha}");
                 // Insertar entrada
                 $db->table('reloj_detalle')->insert([
                     'id_encabezado' => $codEncabezado,
@@ -209,8 +206,6 @@ class AmaxoniaMarcacionService
                     'turno_libre_id' => 0,
                 ]);
             } else {
-                // DEBUG: Actualizando registro existente
-                Log::info("DEBUG: Actualizando registro EXISTENTE en reloj_detalle para ficha {$ficha}");
                 // Actualizar el campo correspondiente basado en el número de marcaciones
                 $campoActualizar = null;
                 if ($tipoEmpresa === '0') {
