@@ -110,6 +110,7 @@ class AmaxoniaMarcacionService
                 ->where('fecha', $fecha)
                 ->count();
 
+
             // 5) Insertar en reloj_marcaciones (log simple)
             $urlGmap = '';
             if (!empty($empleado->lat) && !empty($empleado->lng)) {
@@ -226,8 +227,6 @@ class AmaxoniaMarcacionService
                     }
                 }
 
-                // DEBUG: Solo mostrar qué campo se actualiza
-                Log::info("DEBUG: Actualizando campo '{$campoActualizar}' para ficha {$ficha} tipo_empresa='{$tipoEmpresa}' marcacion_num={$marcacionesDelDia}");
 
                 $db->table('reloj_detalle')
                     ->where('id', $detalle->id)

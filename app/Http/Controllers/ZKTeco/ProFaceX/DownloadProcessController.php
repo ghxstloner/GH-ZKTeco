@@ -20,7 +20,6 @@ class DownloadProcessController extends Controller
         $devSn = $request->input('SN');
         $codEmpresa = $request->get('cod_empresa'); // Obtener del request (configurado por middleware)
 
-        Log::info("getRequest - SN: {$devSn}, cod_empresa: {$codEmpresa}");
 
         /**return when device serial number exception*/
         if (is_null($devSn) || empty($devSn)) {
@@ -90,7 +89,6 @@ class DownloadProcessController extends Controller
         $deviceSn = $request->input('SN');
         $codEmpresa = $request->get('cod_empresa'); // Obtener del request (configurado por middleware)
 
-        Log::info("postDeviceCmd - SN: {$deviceSn}, cod_empresa: {$codEmpresa}");
 
         // Verificar si hay empresa configurada (por middleware)
         if (!DatabaseSwitchService::hayEmpresaConfigurada()) {

@@ -29,7 +29,6 @@ class UploadProcessController extends Controller
         $userPin = $request->query('PIN');
         $codEmpresa = $request->get('cod_empresa'); // Obtener del request (configurado por middleware)
 
-        Log::info("getCdata - SN: {$deviceSn}, options: {$options}, table: {$table}, cod_empresa: {$codEmpresa}");
 
         if (empty($deviceSn)) {
             Log::warning("Device SN vacío");
@@ -81,7 +80,6 @@ class UploadProcessController extends Controller
         $table = $request->input('table');
         $codEmpresa = $request->get('cod_empresa'); // Obtener del request (configurado por middleware)
 
-        Log::info("postCdata - SN: {$deviceSn}, table: {$table}, cod_empresa: {$codEmpresa}");
 
         try {
             // Verificar si hay empresa configurada (por middleware)
@@ -92,14 +90,12 @@ class UploadProcessController extends Controller
 
             $lang = PushUtil::getDeviceLangBySn($deviceSn);
 
-            Log::info("device language:" . $lang . ",get request and begin update device stamp:" . $request->ip() . ";" . $request->fullUrl());
 
             $re = $this->updateDeviceStamp($deviceSn, $request);
             if ($re != 0) {
                 return response('error: device not exist', 404)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
             }
 
-            Log::info("update device stamp end and get stream.");
 
             $bufferData = '';
             $postData = $request->getContent();
@@ -153,12 +149,9 @@ class UploadProcessController extends Controller
                 $this->updateDevInfo($data, $deviceSn);
             }
 
-            Log::info("data:" . $data);
-            Log::info("end get stream and process data");
 
             $result = $this->processDatas($table, $data, $deviceSn);
 
-            Log::info("end process data and return msg to device");
 
             if ($result === 0) {
                 return response('OK', 200)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
@@ -324,7 +317,6 @@ class UploadProcessController extends Controller
             $timeZone = $this->changeTimeZone($devInfo->TIME_ZONE);
         }
         $sb = Str::of($sb)->append("TimeZone=")->append($timeZone)->append("\n");
-        Log::info("Respuesta OPTIONS para {$devInfo->DEVICE_SN}: \n" . $sb->toString());
         return Str::of($sb)->toString();
     }
 

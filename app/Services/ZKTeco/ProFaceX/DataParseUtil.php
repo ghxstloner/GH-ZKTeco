@@ -52,7 +52,6 @@ class DataParseUtil
         }
 
         ManagerFactory::getDeviceLogManager()->addDeviceLog($list);
-        Log::info("oplog size: " . count($list));
         return 0;
     }
 
@@ -92,7 +91,6 @@ class DataParseUtil
      */
     public static function parseUserData(string $data, string $deviceSn)
     {
-        Log::info("user data:\n" . $data);
         $list = [];
         if (null !== $data && !empty($data)) {
             $userInfos = explode("\n", $data);
@@ -117,7 +115,6 @@ class DataParseUtil
         }
 
         ManagerFactory::getUserInfoManager()->createUserInfo($list);
-        Log::info("user size: " . count($list));
         return 0;
     }
 
@@ -173,7 +170,6 @@ class DataParseUtil
      */
     public static function parseFingerPrint(string $data, string $deviceSn)
     {
-        Log::info("finger data:\n" . $data);
         $list = [];
         $fieldsStr = null;
         if (!empty($data)) {
@@ -199,7 +195,6 @@ class DataParseUtil
         }
 
         ManagerFactory::getBioTemplateManager()->createBioTemplate($list);
-        Log::info("fp size: " . count($list));
         return 0;
     }
 
@@ -322,7 +317,6 @@ class DataParseUtil
 
         /** save it into the database */
         $ret = ManagerFactory::getUserInfoManager()->updateUserPic($list);
-        Log::info("userpic size: " . count($list));
         return $ret;
     }
 
@@ -382,7 +376,6 @@ class DataParseUtil
             return -1;
         }
 
-        Log::info("face data:\n" . $data);
         $list = [];
         $faces = explode("\n", $data);
         foreach ($faces as $string) {
@@ -398,7 +391,6 @@ class DataParseUtil
 
         /** Save the templates into the database */
         ManagerFactory::getBioTemplateManager()->createBioTemplate($list);
-        Log::info("face size: " . count($list));
         return 0;
     }
 
@@ -551,14 +543,11 @@ class DataParseUtil
                     ->where('DEVICE_SN', $log->DEVICE_SN)
                     ->where('VERIFY_TYPE', $log->VERIFY_TYPE)
                     ->first();
-                    
+
                 if ($existingRecord) {
                     // Si el registro existe pero no ha sido procesado, lo agregamos a la lista para procesamiento
                     if ($existingRecord->procesado == 0) {
                         // No agregar a la lista de nuevos registros, solo procesar los pendientes al final
-                        Log::info("Registro existente no procesado encontrado: " . print_r($log->toArray(), true));
-                    } else {
-                        Log::info("Registro ya procesado, omitiendo: " . print_r($log->toArray(), true));
                     }
                     $result = 1;
                     continue;
@@ -575,7 +564,6 @@ class DataParseUtil
         // Siempre procesar registros pendientes (independientemente de si hay nuevos registros)
         try {
             $resultadoProcesamiento = \App\Services\AmaxoniaMarcacionService::procesarRegistrosPendientes();
-            Log::info("Nuevos registros guardados: " . count($list) . " | Registros procesados: " . $resultadoProcesamiento['procesados'] . " | Errores: " . $resultadoProcesamiento['errores']);
         } catch (\Exception $e) {
             Log::error("Error procesando registros pendientes: " . $e->getMessage());
         }
