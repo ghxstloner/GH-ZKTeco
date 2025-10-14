@@ -210,22 +210,34 @@ class AmaxoniaMarcacionService
                 $campoActualizar = null;
                 if ($tipoEmpresa === '0') {
                     // 2 marcaciones: entrada y salida
-                    $campoActualizar = ($marcacionesDelDia % 2 == 1) ? 'entrada' : 'salida';
+                    if ($marcacionesDelDia <= 2) {
+                        // Dentro del ciclo normal (1-2 marcaciones)
+                        $campoActualizar = ($marcacionesDelDia % 2 == 1) ? 'entrada' : 'salida';
+                    } else {
+                        // Marcaciones adicionales (3, 4, 5...): siempre salida
+                        $campoActualizar = 'salida';
+                    }
                 } else {
                     // 4 marcaciones: entrada, salmuerzo, ealmuerzo, salida
-                    switch ($marcacionesDelDia % 4) {
-                        case 1:
-                            $campoActualizar = 'entrada';
-                            break;
-                        case 2:
-                            $campoActualizar = 'salmuerzo';
-                            break;
-                        case 3:
-                            $campoActualizar = 'ealmuerzo';
-                            break;
-                        case 0:
-                            $campoActualizar = 'salida';
-                            break;
+                    if ($marcacionesDelDia <= 4) {
+                        // Dentro del ciclo normal (1-4 marcaciones)
+                        switch ($marcacionesDelDia % 4) {
+                            case 1:
+                                $campoActualizar = 'entrada';
+                                break;
+                            case 2:
+                                $campoActualizar = 'salmuerzo';
+                                break;
+                            case 3:
+                                $campoActualizar = 'ealmuerzo';
+                                break;
+                            case 0:
+                                $campoActualizar = 'salida';
+                                break;
+                        }
+                    } else {
+                        // Marcaciones adicionales (5, 6, 7...): siempre salida
+                        $campoActualizar = 'salida';
                     }
                 }
 
