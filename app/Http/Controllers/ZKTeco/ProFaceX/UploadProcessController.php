@@ -312,11 +312,11 @@ class UploadProcessController extends Controller
         $sb = Str::of($sb)->append("Realtime=1\n");
         $sb = Str::of($sb)->append("Encrypt=1\n");
         $sb = Str::of($sb)->append("ServerVer=2.2.14\n");
-        $timeZone = $devInfo->TIME_ZONE;
-        if (!empty($timeZone)) {
-            $timeZone = $this->changeTimeZone($devInfo->TIME_ZONE);
-        }
-        $sb = Str::of($sb)->append("TimeZone=")->append($timeZone)->append("\n");
+        // $timeZone = $devInfo->TIME_ZONE;
+        // if (!empty($timeZone)) {
+        //     $timeZone = $this->changeTimeZone($devInfo->TIME_ZONE);
+        // }
+        // $sb = Str::of($sb)->append("TimeZone=")->append($timeZone)->append("\n");
         return Str::of($sb)->toString();
     }
 
