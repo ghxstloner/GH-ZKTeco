@@ -31,13 +31,11 @@ class UploadProcessController extends Controller
 
 
         if (empty($deviceSn)) {
-            Log::warning("Device SN vacío");
             return response('error: SN is empty', 400)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
         }
 
         // Verificar si hay empresa configurada (por middleware)
         if (!DatabaseSwitchService::hayEmpresaConfigurada()) {
-            Log::warning("No hay empresa configurada");
             return response('error: company not configured', 500)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
         }
 
@@ -68,7 +66,6 @@ class UploadProcessController extends Controller
                 return response('error: invalid parameters', 400)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
             }
         } catch (\Exception $e) {
-            Log::error($e->getMessage());
             return response('error: internal server error', 500)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
         }
     }
@@ -84,7 +81,6 @@ class UploadProcessController extends Controller
         try {
             // Verificar si hay empresa configurada (por middleware)
             if (!DatabaseSwitchService::hayEmpresaConfigurada()) {
-                Log::warning("No hay empresa configurada en postCdata");
                 return response('error: company not configured', 500)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
             }
 
@@ -159,7 +155,6 @@ class UploadProcessController extends Controller
                 return response('error', 500)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
             }
         } catch (\Exception $e) {
-            Log::error($e);
             // Mejora: Manejo de excepciones explícito
             return response('Error', 500)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
         }
@@ -317,6 +312,10 @@ class UploadProcessController extends Controller
         //     $timeZone = $this->changeTimeZone($devInfo->TIME_ZONE);
         // }
         // $sb = Str::of($sb)->append("TimeZone=")->append($timeZone)->append("\n");
+
+        Log::info("=== SALIDA OPTIONS PARA SN {$devInfo->DEVICE_SN} ===");
+        Log::info((string) $sb);
+
         return Str::of($sb)->toString();
     }
 
@@ -386,7 +385,6 @@ class UploadProcessController extends Controller
                 $file = null;
             }
         } catch (\Exception $e) {
-            Log::error($e->getMessage());
         }
 
         return $file;

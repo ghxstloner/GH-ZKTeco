@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
 class AmaxoniaMarcacionService
@@ -131,9 +130,6 @@ class AmaxoniaMarcacionService
                 ->where('fecha', $fecha)
                 ->count();
 
-            // DEBUG: Mostrar conteo de marcaciones
-            Log::info("DEBUG: Marcaciones del día para ficha {$ficha}: {$marcacionesDelDia}");
-
             // 7) Insertar/Actualizar reloj_detalle aplicando la lógica REAL
             if (!$detalle) {
                 // Insertar entrada
@@ -241,9 +237,6 @@ class AmaxoniaMarcacionService
                     }
                 }
 
-                // DEBUG: Mostrar qué campo se va a actualizar
-                Log::info("DEBUG: Actualizando campo '{$campoActualizar}' para ficha {$ficha} tipo_empresa='{$tipoEmpresa}' marcacion_num={$marcacionesDelDia}");
-
                 $db->table('reloj_detalle')
                     ->where('id', $detalle->id)
                     ->update([$campoActualizar => $hora]);
@@ -251,7 +244,6 @@ class AmaxoniaMarcacionService
 
             $db->commit();
 
-            Log::info("Marcación registrada para {$empresa['nombre']} | ficha={$ficha} | fecha={$fecha} | hora={$hora}");
             return ['success' => true];
         } catch (\Exception $e) {
             try {
@@ -259,7 +251,6 @@ class AmaxoniaMarcacionService
             } catch (\Throwable $t) {
                 // ignorar si no hay transacción abierta
             }
-            Log::error('Error procesando marcación: ' . $e->getMessage());
             throw $e;
         }
     }
@@ -304,7 +295,6 @@ class AmaxoniaMarcacionService
             ];
 
         } catch (\Exception $e) {
-            Log::error("Error obteniendo marcaciones: " . $e->getMessage());
             throw $e;
         }
     }
@@ -349,8 +339,6 @@ class AmaxoniaMarcacionService
                     $errores++;
                 }
             }
-
-            Log::info("Procesamiento completado: {$procesados} registros procesados, {$errores} errores");
 
             return [
                 'success' => true,
@@ -423,8 +411,6 @@ class AmaxoniaMarcacionService
                 }
             }
 
-            Log::info("Procesamiento completo terminado: {$procesados} nuevos procesados, {$yaExistian} ya existían, {$errores} errores");
-
             return [
                 'success' => true,
                 'procesados' => $procesados,
@@ -484,7 +470,6 @@ class AmaxoniaMarcacionService
             ];
 
         } catch (\Exception $e) {
-            Log::error("Error verificando estado de empleado: " . $e->getMessage());
             throw $e;
         }
     }

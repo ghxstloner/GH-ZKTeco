@@ -28,7 +28,6 @@ class DownloadProcessController extends Controller
 
         // Verificar si hay empresa configurada (por middleware)
         if (!DatabaseSwitchService::hayEmpresaConfigurada()) {
-            Log::warning("No hay empresa configurada en getRequest");
             return response('error')->header('Content-Type', 'text/plain');
         }
 
@@ -79,6 +78,9 @@ class DownloadProcessController extends Controller
             ManagerFactory::getDeviceManager()->updateDeviceState($devSn, "connecting", Carbon::now()->format('Y-m-d H:i:s'));
         }
 
+        Log::info("=== SALIDA GETREQUEST PARA SN {$devSn} ===");
+        Log::info($response->getContent());
+
         return $response;
     }
 
@@ -92,7 +94,6 @@ class DownloadProcessController extends Controller
 
         // Verificar si hay empresa configurada (por middleware)
         if (!DatabaseSwitchService::hayEmpresaConfigurada()) {
-            Log::warning("No hay empresa configurada en postDeviceCmd");
             return response('error')->header('Content-Type', 'text/plain');
         }
 
@@ -142,7 +143,6 @@ class DownloadProcessController extends Controller
                 return $response->setContent('Error');
             }
         } catch (\Exception $e) {
-            Log::error($e);
             return $response->setContent('Error');
         }
     }
@@ -302,7 +302,6 @@ class DownloadProcessController extends Controller
                 return null;
             }
         } catch (\Exception $e) {
-            Log::error($e);
             return null;
         }
     }

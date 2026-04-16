@@ -4,7 +4,6 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Facades\Log;
 
 class DatabaseSwitchService
 {
@@ -37,7 +36,6 @@ class DatabaseSwitchService
             ];
 
         } catch (\Exception $e) {
-            Log::error("Error obteniendo empresa: " . $e->getMessage());
             throw $e;
         }
     }
@@ -68,7 +66,6 @@ class DatabaseSwitchService
             return $empresa;
 
         } catch (\Exception $e) {
-            Log::error("Error configurando base de datos de empresa: " . $e->getMessage());
             throw $e;
         }
     }

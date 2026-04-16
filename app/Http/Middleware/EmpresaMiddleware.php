@@ -5,7 +5,6 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use App\Services\DatabaseSwitchService;
-use Illuminate\Support\Facades\Log;
 
 class EmpresaMiddleware
 {
@@ -31,12 +30,8 @@ class EmpresaMiddleware
                 $request->merge(['cod_empresa' => $codEmpresa]);
 
             } catch (\Exception $e) {
-                Log::error("Error configurando empresa en middleware: " . $e->getMessage());
                 return response('error', 400)->header('Content-Type', 'text/plain');
             }
-        } else {
-            // Si no hay código de empresa, usar la configuración por defecto
-            Log::info("No se proporcionó código de empresa, usando configuración por defecto");
         }
 
         return $next($request);
