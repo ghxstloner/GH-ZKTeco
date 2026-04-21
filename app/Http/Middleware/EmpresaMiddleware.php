@@ -34,6 +34,10 @@ class EmpresaMiddleware
             }
         }
 
-        return $next($request);
+        $response = $next($request);
+
+        $response->headers->remove('Date');
+
+        return $response;
     }
 }
