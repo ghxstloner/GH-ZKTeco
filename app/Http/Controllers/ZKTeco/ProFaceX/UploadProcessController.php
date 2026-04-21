@@ -22,21 +22,18 @@ class UploadProcessController extends Controller
 {
     public function getCdata(Request $request)
     {
-        $dateTime = DataParseUtil::getDateTimeInGMTFormat();
         $deviceSn = $request->query('SN');
         $options = $request->query('options');
         $table = $request->query('table');
         $userPin = $request->query('PIN');
-        $codEmpresa = $request->get('cod_empresa'); // Obtener del request (configurado por middleware)
-
+        $codEmpresa = $request->get('cod_empresa');
 
         if (empty($deviceSn)) {
-            return response('error: SN is empty', 400)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
+            return response('error: SN is empty', 400)->header('Content-Type', 'text/plain');
         }
 
-        // Verificar si hay empresa configurada (por middleware)
         if (!DatabaseSwitchService::hayEmpresaConfigurada()) {
-            return response('error: company not configured', 500)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
+            return response('error: company not configured', 500)->header('Content-Type', 'text/plain');
         }
 
         $lang = "";
@@ -47,41 +44,37 @@ class UploadProcessController extends Controller
                 $devInfo = $this->getDeviceInfo($deviceSn, $request, $codEmpresa);
                 if (!is_null($devInfo)) {
                     $deviceOptions = $this->getDeviceOptions($devInfo);
-                    return response($deviceOptions)->header('Content-Type', 'text/plain')->header('Date', $dateTime)->header('charset', $charset);
+                    return response($deviceOptions)->header('Content-Type', 'text/plain')->header('charset', $charset);
                 } else {
-                    return response('error: device not found', 404)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
+                    return response('error: device not found', 404)->header('Content-Type', 'text/plain');
                 }
             } elseif ($table === 'RemoteAtt') {
                 if (is_null($userPin) || empty($userPin)) {
-                    return response('error: PIN is empty for RemoteAtt', 400)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
+                    return response('error: PIN is empty for RemoteAtt', 400)->header('Content-Type', 'text/plain');
                 }
 
                 if ($this->processRemoteAtt($userPin, $deviceSn, $lang) === 0) {
-                    return response(null)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
+                    return response(null)->header('Content-Type', 'text/plain');
                 } else {
-                    return response('error')->header('Content-Type', 'text/plain')->header('Date', $dateTime);
+                    return response('error')->header('Content-Type', 'text/plain');
                 }
             } else {
-                // Mejora: Respuesta por defecto para parámetros no válidos
-                return response('error: invalid parameters', 400)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
+                return response('error: invalid parameters', 400)->header('Content-Type', 'text/plain');
             }
         } catch (\Exception $e) {
-            return response('error: internal server error', 500)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
+            return response('error: internal server error', 500)->header('Content-Type', 'text/plain');
         }
     }
 
     public function postCdata(Request $request)
     {
-        $dateTime = DataParseUtil::getDateTimeInGMTFormat();
         $deviceSn = $request->input('SN');
         $table = $request->input('table');
-        $codEmpresa = $request->get('cod_empresa'); // Obtener del request (configurado por middleware)
-
+        $codEmpresa = $request->get('cod_empresa');
 
         try {
-            // Verificar si hay empresa configurada (por middleware)
             if (!DatabaseSwitchService::hayEmpresaConfigurada()) {
-                return response('error: company not configured', 500)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
+                return response('error: company not configured', 500)->header('Content-Type', 'text/plain');
             }
 
             $lang = PushUtil::getDeviceLangBySn($deviceSn);
@@ -89,7 +82,7 @@ class UploadProcessController extends Controller
 
             $re = $this->updateDeviceStamp($deviceSn, $request);
             if ($re != 0) {
-                return response('error: device not exist', 404)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
+                return response('error: device not exist', 404)->header('Content-Type', 'text/plain');
             }
 
 
@@ -108,7 +101,7 @@ class UploadProcessController extends Controller
                     $path = $this->createAttPhotoFile($buffer, $pathStr);
 
                     if ($path === null) {
-                        return response('OK', 200)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
+                        return response('OK', 200)->header('Content-Type', 'text/plain');
                     }
 
                     $filePath = $path;
@@ -150,13 +143,12 @@ class UploadProcessController extends Controller
 
 
             if ($result === 0) {
-                return response('OK', 200)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
+                return response('OK', 200)->header('Content-Type', 'text/plain');
             } else {
-                return response('error', 500)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
+                return response('error', 500)->header('Content-Type', 'text/plain');
             }
         } catch (\Exception $e) {
-            // Mejora: Manejo de excepciones explícito
-            return response('Error', 500)->header('Content-Type', 'text/plain')->header('Date', $dateTime);
+            return response('Error', 500)->header('Content-Type', 'text/plain');
         }
     }
 
@@ -306,11 +298,6 @@ class UploadProcessController extends Controller
         $sb = Str::of($sb)->append("Realtime=1\n");
         $sb = Str::of($sb)->append("Encrypt=1\n");
         $sb = Str::of($sb)->append("ServerVer=2.2.14\n");
-        // $timeZone = $devInfo->TIME_ZONE;
-        // if (!empty($timeZone)) {
-        //     $timeZone = $this->changeTimeZone($devInfo->TIME_ZONE);
-        // }
-        // $sb = Str::of($sb)->append("TimeZone=")->append($timeZone)->append("\n");
 
         Log::info("=== SALIDA OPTIONS PARA SN {$devInfo->DEVICE_SN} ===");
         Log::info((string) $sb);
@@ -387,26 +374,6 @@ class UploadProcessController extends Controller
         }
 
         return $file;
-    }
-
-    private function changeTimeZone($timeZone): string
-    {
-        $timeStr = '';
-        $str1 = substr($timeZone, 0, 1);
-        $str2 = substr($timeZone, 1, 2);
-        $str3 = substr($timeZone, 3);
-
-        if ($str1 == '-') {
-            $timeStr .= $str1;
-        }
-
-        if ($str3 === "00") {
-            $timeStr .= intval($str2);
-        } else {
-            $timeStr .= (intval($str2) * 60 + intval($str3));
-        }
-
-        return $timeStr;
     }
 
     private function processRemoteAtt($userPin, $deviceSn, $lang): int
