@@ -225,7 +225,6 @@ class UploadProcessController extends Controller
             $devInfo->PHOTO_STAMP = "0";
             $devInfo->DEV_LANGUAGE = $language;
             $devInfo->PUSH_VERSION = $pushver ?: "1.0.0";
-            $devInfo->TIME_ZONE = "";
             $devInfo->TRANS_TIMES = "00:00;14:05";
             $devInfo->PUSH_COMM_KEY = $pushcommkey;
             $devInfo->LAST_ACTIVITY = Carbon::now()->format('Y-m-d H:i:s');
