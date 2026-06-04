@@ -70,6 +70,19 @@ class AmaxoniaMarcacionService
                 ->where('fecha', $fecha)
                 ->value('turno_id');
 
+            // --- Consultar salida_ds de la tabla nomturnos ---
+            $salidaDiaSiguiente = 'NO';
+            if (!empty($turno)) {
+                $salidaDs = $db->table('nomturnos')
+                    ->where('turno_id', $turno)
+                    ->value('salida_ds');
+
+                if ($salidaDs == 1) {
+                    $salidaDiaSiguiente = 'SI';
+                }
+            }
+            // -------------------------------------------------
+
             // 3) Encabezado del día (reloj_encabezado)
             $codEncabezado = $db->table('reloj_encabezado')
                 ->whereRaw('? between fecha_ini and fecha_fin', [$fecha])
@@ -162,7 +175,7 @@ class AmaxoniaMarcacionService
                     'marcacion_disp_id' => $empleado->idDispositivo ?? null,
                     'ent_emer' => '',
                     'sal_emer' => '',
-                    'salida_diasiguiente' => '',
+                    'salida_diasiguiente' => $salidaDiaSiguiente,
                     'observacion' => null,
                     'hora_inicio' => '',
                     'estatus' => 0,
@@ -239,7 +252,10 @@ class AmaxoniaMarcacionService
 
                 $db->table('reloj_detalle')
                     ->where('id', $detalle->id)
-                    ->update([$campoActualizar => $hora]);
+                    ->update([
+                        $campoActualizar => $hora,
+                        'salida_diasiguiente' => $salidaDiaSiguiente
+                    ]);
             }
 
             $db->commit();
@@ -267,19 +283,21 @@ class AmaxoniaMarcacionService
 
             $conexion = DatabaseSwitchService::getConexionEmpresa();
 
-            // Verificar si el empleado existe
-            $empleado = $conexion->table('empleados')
-                ->where('pin', $pin)
-                ->where('activo', 1)
+            // Buscar en 'nompersonal' para mantener consistencia
+            $empleado = $conexion->table('nompersonal')
+                ->where(function ($q) use ($pin) {
+                    $q->where('ficha', $pin)->orWhere('cedula', $pin);
+                })
+                ->whereIn('estado', ['Activo', 'REGULAR'])
                 ->first();
 
             if (!$empleado) {
-                throw new \Exception("Empleado con PIN {$pin} no encontrado o inactivo");
+                throw new \Exception("Empleado con PIN/Documento {$pin} no encontrado o inactivo");
             }
 
-            // Obtener marcaciones
-            $marcaciones = $conexion->table('marcaciones')
-                ->where('cod_empleado', $empleado->codigo)
+            // Obtener marcaciones (reloj_marcaciones es el log real)
+            $marcaciones = $conexion->table('reloj_marcaciones')
+                ->where('ficha_empleado', $empleado->ficha)
                 ->whereBetween('fecha', [$fechaInicio, $fechaFin])
                 ->orderBy('fecha', 'asc')
                 ->orderBy('hora', 'asc')
@@ -287,9 +305,9 @@ class AmaxoniaMarcacionService
 
             return [
                 'empleado' => [
-                    'codigo' => $empleado->codigo,
-                    'nombre' => $empleado->nombre,
-                    'pin' => $empleado->pin
+                    'codigo' => $empleado->personal_id,
+                    'nombre' => $empleado->apenom,
+                    'pin' => $empleado->ficha
                 ],
                 'marcaciones' => $marcaciones
             ];
@@ -436,34 +454,36 @@ class AmaxoniaMarcacionService
 
             $conexion = DatabaseSwitchService::getConexionEmpresa();
 
-            // Verificar si el empleado existe
-            $empleado = $conexion->table('empleados')
-                ->where('pin', $pin)
-                ->where('activo', 1)
+            // Buscar en 'nompersonal' para mantener consistencia
+            $empleado = $conexion->table('nompersonal')
+                ->where(function ($q) use ($pin) {
+                    $q->where('ficha', $pin)->orWhere('cedula', $pin);
+                })
+                ->whereIn('estado', ['Activo', 'REGULAR'])
                 ->first();
 
             if (!$empleado) {
-                throw new \Exception("Empleado con PIN {$pin} no encontrado o inactivo");
+                throw new \Exception("Empleado con PIN/Documento {$pin} no encontrado o inactivo");
             }
 
-            // Obtener la última marcación del día
+            // Obtener la última marcación del día (reloj_marcaciones)
             $hoy = Carbon::now()->format('Y-m-d');
-            $ultimaMarcacion = $conexion->table('marcaciones')
-                ->where('cod_empleado', $empleado->codigo)
+            $ultimaMarcacion = $conexion->table('reloj_marcaciones')
+                ->where('ficha_empleado', $empleado->ficha)
                 ->where('fecha', $hoy)
                 ->orderBy('hora', 'desc')
                 ->first();
 
             $estado = 'SIN_MARCAR';
             if ($ultimaMarcacion) {
-                $estado = $ultimaMarcacion->tipo === 'E' ? 'EN_TURNO' : 'FUERA_TURNO';
+                $estado = $ultimaMarcacion->tipo == 0 ? 'EN_TURNO' : 'FUERA_TURNO';
             }
 
             return [
                 'empleado' => [
-                    'codigo' => $empleado->codigo,
-                    'nombre' => $empleado->nombre,
-                    'pin' => $empleado->pin
+                    'codigo' => $empleado->personal_id,
+                    'nombre' => $empleado->apenom,
+                    'pin' => $empleado->ficha
                 ],
                 'estado' => $estado,
                 'ultima_marcacion' => $ultimaMarcacion
