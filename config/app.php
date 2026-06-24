@@ -165,6 +165,9 @@ return [
         // App\Providers\EventServiceProvider::class, // Lo dejamos comentado por si no tienes el archivo
         App\Providers\RouteServiceProvider::class,
 
+        // Hikvision PULL via ISUP Bridge
+        App\Providers\HikvisionServiceProvider::class,
+
     ],
 
 ];

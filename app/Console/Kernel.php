@@ -19,7 +19,10 @@ class Kernel extends ConsoleKernel
     /**
      * Define the application's command schedule.
      *
-     * These schedules are run in a single process, so avoid doing any heavy processing here.
+     * NOTA: en este proyecto (Laravel 12 con bootstrap fluido via
+     * bootstrap/app.php Application::configure()) este método está OBSOLETO.
+     * Las cadencias scheduladas se registran en routes/console.php con la
+     * facade Schedule::. Se mantiene el stub por compatibilidad.
      *
      * @param  \Illuminate\Console\Scheduling\Schedule  $schedule
      * @return void
