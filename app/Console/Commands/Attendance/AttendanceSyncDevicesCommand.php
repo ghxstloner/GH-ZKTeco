@@ -21,11 +21,14 @@ class AttendanceSyncDevicesCommand extends Command
 
     public function handle(): int
     {
-        // Fase actual: solo Hikvision. Futuro: anadir rama ZKTeco sin tocar
-        // app/Services/ZKTeco (solo un wrapper que llame a AsistenciaDispositivoService).
+        // Hikvision = DEVICE-DRIVEN (recorre el Bridge y resuelve el tenant
+        // por deviceId == codigo). ZKTeco = TENANT-DRIVEN (itera nomempresa y
+        // lee profacex_device_info en cada BD de tenant).
         $this->info('Sync asistencia_dispositivos (driver: hikvision) ...');
-
         $this->call('hikvision:sync-devices');
+
+        $this->info('Sync asistencia_dispositivos (driver: zkteco) ...');
+        $this->call('zkteco:sync-devices');
 
         return self::SUCCESS;
     }

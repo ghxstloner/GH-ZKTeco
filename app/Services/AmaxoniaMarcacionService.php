@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
 class AmaxoniaMarcacionService
@@ -368,6 +369,115 @@ class AmaxoniaMarcacionService
         } catch (\Exception $e) {
             throw $e;
         }
+    }
+
+    /**
+     * Drena `hikvision_event_log.PROCESSED=0` hacia `procesarMarcacion()` para
+     * TODOS los tenants activos de `nomempresa`.
+     *
+     * Es el espejo de `procesarRegistrosPendientes()` (que drena
+     * `profacex_att_log.procesado=0` para ZKTeco). El mapeo de PIN es directo:
+     * el `employeeNo` Hikvision que guardamos al sincronizar proviene de
+     * `n.ficha` en `DispositivosController`, y `procesarMarcacion` ya resuelve
+     * ficha|cedula, por lo que son equivalentes.
+     *
+     * Resiliencia:
+     *  - Una empresa que falle por completo NO aborta a las demás.
+     *  - Un evento que falle se marca `PROCESSED=1` con `SYNC_ERROR` poblado,
+     *    para no reintentar el mismo evento infinitamente (mismo criterio que
+     *    `profacex_att_log` cuando falla un solo usuario).
+     *  - El tenant-driven loop reutiliza `TenantMigrationRunner::foreachTenant`
+     *    para garantizar el mismo set de empresas que las migraciones.
+     *
+     * Invocado por el scheduler `hikvision:process-events` cada minuto.
+     *
+     * @return array{empresas:int, procesados:int, errores:int, total:int}
+     */
+    public static function procesarEventosHikvisionPendientes(): array
+    {
+        $stats = ['empresas' => 0, 'procesados' => 0, 'errores' => 0, 'total' => 0];
+
+        // foreachTenant conmuta la conexión 'empresa' por cada activa.
+        \App\Support\TenantMigrationRunner::foreachTenant(function (string $conn, object $tenant) use (&$stats) {
+            $stats['empresas']++;
+
+            try {
+                $db = DatabaseSwitchService::getConexionEmpresa();
+            } catch (\Throwable $e) {
+                Log::warning('[HikvisionDrain] empresa {cod} sin conexion empresa: {err}', [
+                    'cod' => $tenant->codigo,
+                    'err' => $e->getMessage(),
+                ]);
+
+                return;
+            }
+
+            // Solo drenar si la tabla existe en este tenant (migraciones
+            // Hikvision aplicadas). Si no, skip silencioso.
+            if (!\Illuminate\Support\Facades\Schema::connection('empresa')->hasTable('hikvision_event_log')) {
+                return;
+            }
+
+            $pendientes = $db->table('hikvision_event_log')
+                ->where('PROCESSED', 0)
+                ->orderBy('EVENT_TIME', 'asc')
+                ->limit(500)
+                ->get();
+
+            if ($pendientes->isEmpty()) {
+                return;
+            }
+
+            $stats['total'] += $pendientes->count();
+
+            foreach ($pendientes as $evento) {
+                try {
+                    // El PIN de Hikvision es el employeeNo que guardamos
+                    // durante sync (= ficha del colaborador).
+                    $pin = (string) ($evento->EMPLOYEE_NO_STRING !== null && $evento->EMPLOYEE_NO_STRING !== ''
+                        ? $evento->EMPLOYEE_NO_STRING
+                        : ($evento->EMPLOYEE_NO ?? ''));
+
+                    if ($pin === '') {
+                        throw new \Exception('Evento sin EMPLOYEE_NO');
+                    }
+
+                    self::procesarMarcacion([
+                        'pin'        => $pin,
+                        'fecha_hora' => $evento->EVENT_TIME,
+                    ]);
+
+                    $db->table('hikvision_event_log')
+                        ->where('EVENT_ID', $evento->EVENT_ID)
+                        ->update(['PROCESSED' => 1, 'updated_at' => now()]);
+
+                    $stats['procesados']++;
+                } catch (\Throwable $e) {
+                    // Marcamos procesado para no reintentar eternamente; el
+                    // detalle queda en SYNC_ERROR para diagnóstico.
+                    $db->table('hikvision_event_log')
+                        ->where('EVENT_ID', $evento->EVENT_ID)
+                        ->update([
+                            'PROCESSED'  => 1,
+                            'SYNC_ERROR' => \Illuminate\Support\Str::limit($e->getMessage(), 480),
+                            'updated_at' => now(),
+                        ]);
+
+                    $stats['errores']++;
+
+                    Log::warning('[HikvisionDrain] evento {id} fallo: {err}', [
+                        'id'  => $evento->EVENT_ID,
+                        'err' => $e->getMessage(),
+                    ]);
+                }
+            }
+        });
+
+        if ($stats['total'] > 0) {
+            Log::info('[HikvisionDrain] drenado completado', $stats);
+        }
+
+        return $stats;
     }
 
     /**
