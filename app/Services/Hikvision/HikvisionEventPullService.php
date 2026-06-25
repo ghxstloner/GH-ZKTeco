@@ -314,7 +314,13 @@ class HikvisionEventPullService
         $eventTime = static::extractTime($event);
 
         $ficha = null;
-        $empNo = isset($event['employeeNo']) ? (string) $event['employeeNo'] : null;
+        // El Bridge puede enviar el número de empleado en `employeeNo` o en
+        // `employeeNoString` (camelCase). Se acepta cualquiera de los dos.
+        $empNo = isset($event['employeeNo']) && $event['employeeNo'] !== ''
+            ? (string) $event['employeeNo']
+            : (isset($event['employeeNoString']) && $event['employeeNoString'] !== ''
+                ? (string) $event['employeeNoString']
+                : null);
         if ($empNo !== null && is_numeric($empNo)) {
             $ficha = (int) $empNo;
         }
@@ -324,7 +330,7 @@ class HikvisionEventPullService
             'DEDUP_KEY' => $dedup,
             'BRIDGE_DEVICE_ID' => $bridgeId,
             'EMPLOYEE_NO' => $empNo,
-            'EMPLOYEE_NO_STRING' => isset($event['employeeNo']) ? (string) $event['employeeNo'] : null,
+            'EMPLOYEE_NO_STRING' => $empNo,
             'FICHA' => $ficha,
             'EVENT_TIME' => $eventTime,
             'MAJOR_EVENT' => static::intOrNull($event['majorEventType'] ?? $event['major'] ?? null),

@@ -74,11 +74,6 @@ class TenantMigrationRunner
                 continue;
             }
 
-            Log::info('[TenantMigration] aplicando migración en tenant {cod} -> bd={bd}', [
-                'cod' => $tenant->codigo,
-                'bd' => $bd,
-            ]);
-
             // Si $fn lanza, la excepción se propaga y la migración falla.
             $fn('empresa', $tenant);
         }
