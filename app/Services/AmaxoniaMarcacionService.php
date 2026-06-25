@@ -401,7 +401,14 @@ class AmaxoniaMarcacionService
         \App\Support\TenantMigrationRunner::foreachTenant(function (string $conn, object $tenant) use (&$stats) {
             $stats['empresas']++;
 
+            // foreachTenant configura DB::connection('empresa') via Config::set,
+            // PERO no toca el estado interno de DatabaseSwitchService (el flag
+            // estatico $conexionConfigurada). Sin esta llamada, getConexionEmpresa()
+            // y procesarMarcacion() (que la usa) revientan con
+            // "No se ha configurado conexión de empresa". Por eso re-invocamos
+            // setBdEmpresa con el codigo del tenant que ya sabemos activo.
             try {
+                DatabaseSwitchService::setBdEmpresa((string) $tenant->codigo);
                 $db = DatabaseSwitchService::getConexionEmpresa();
             } catch (\Throwable $e) {
                 Log::warning('[HikvisionDrain] empresa {cod} sin conexion empresa: {err}', [
