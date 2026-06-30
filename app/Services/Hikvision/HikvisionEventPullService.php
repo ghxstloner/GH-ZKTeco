@@ -6,6 +6,7 @@ use App\Services\DatabaseSwitchService;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Pull de marcaciones (eventos AcsEvent) desde el Bridge ISUP por rango de
@@ -62,40 +63,43 @@ class HikvisionEventPullService
 
         foreach ($bridgeDevices as $bd) {
             $id = (string) ($bd['deviceId'] ?? '');
+            $identity = HikvisionDeviceIdentityResolver::resolve($id);
 
-            // Filtro --device opcional (por deviceId del Bridge).
-            if ($bridgeDeviceId !== null && $bridgeDeviceId !== '' && $id !== $bridgeDeviceId) {
-                continue;
+            // Filtro --device opcional: acepta raw o canonical.
+            if ($bridgeDeviceId !== null && $bridgeDeviceId !== '') {
+                $filterIdentity = HikvisionDeviceIdentityResolver::resolve($bridgeDeviceId);
+                $matchesFilter = $id === $bridgeDeviceId
+                    || ($identity !== null && $filterIdentity !== null
+                        && $identity->canonicalDeviceId === $filterIdentity->canonicalDeviceId);
+
+                if (!$matchesFilter) {
+                    continue;
+                }
             }
 
             ++$stats['devices'];
 
-            if ($id === '' || !is_numeric($id)) {
+            if ($identity === null) {
                 Log::warning('[HikvisionEvents] deviceId invalido: {id}', ['id' => $id ?: '(vacio)']);
                 ++$stats['errors'];
                 continue;
             }
 
-            $codigo = (string) ((int) $id);
-
-            // deviceId == codigo empresa: resolver (y conmutar) el tenant.
-            $empresa = static::resolverTenantPorCodigo($codigo);
+            // El deviceId nuevo codifica empresa+secuencia; aliases legacy
+            // mantienen compatibilidad con deviceId corto == codigo empresa.
+            $empresa = static::resolverTenantPorCodigo($identity->empresaCodigo);
             if ($empresa === null) {
                 ++$stats['skipped'];
                 continue;
             }
 
             // Recuperar el dispositivo en la BD tenant (lo debió crear sync-devices).
-            $device = DB::connection('empresa')
-                ->table('hikvision_device_info')
-                ->where('BRIDGE_DEVICE_ID', $id)
-                ->where('IS_ACTIVE', 1)
-                ->first();
+            $device = static::findDeviceInfo($id, $identity);
 
             if ($device === null) {
                 Log::info('[HikvisionEvents] device {id} no registrado en BD tenant {cod}, se omite (correr sync-devices primero)', [
                     'id' => $id,
-                    'cod' => $codigo,
+                    'cod' => $identity->empresaCodigo,
                 ]);
                 ++$stats['skipped'];
                 continue;
@@ -151,6 +155,35 @@ class HikvisionEventPullService
         DatabaseSwitchService::setBdEmpresa($codigo);
 
         return DatabaseSwitchService::getEmpresaActual();
+    }
+
+    private static function findDeviceInfo(string $rawDeviceId, HikvisionDeviceIdentity $identity): ?object
+    {
+        $query = DB::connection('empresa')
+            ->table('hikvision_device_info')
+            ->where('IS_ACTIVE', 1);
+
+        if (static::hasTenantColumn('hikvision_device_info', 'ISUP_DEVICE_ID_CANONICAL')) {
+            $device = (clone $query)
+                ->where('ISUP_DEVICE_ID_CANONICAL', $identity->canonicalDeviceId)
+                ->first();
+            if ($device !== null) {
+                return $device;
+            }
+        }
+
+        return $query
+            ->where('BRIDGE_DEVICE_ID', $rawDeviceId)
+            ->first();
+    }
+
+    private static function hasTenantColumn(string $table, string $column): bool
+    {
+        try {
+            return Schema::connection('empresa')->hasColumn($table, $column);
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     /**

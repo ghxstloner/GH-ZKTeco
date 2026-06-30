@@ -97,7 +97,7 @@ en tiempo de ejecución.
 # Verificar conectividad con el Bridge (no toca BD):
 php artisan hikvision:verify-bridge
 
-# Sincronizar dispositivos (recorre el Bridge y resuelve tenant por deviceId):
+# Sincronizar dispositivos (recorre el Bridge y resuelve tenant por Device ID canonico):
 php artisan hikvision:sync-devices
 
 # Pull de marcaciones (rango por defecto = últimos 10 min):
@@ -108,17 +108,57 @@ php artisan hikvision:pull-events \
     --from="2026-06-24T00:00:00-05:00" \
     --to="2026-06-24T12:00:00-05:00"
 
-# Pull para un solo dispositivo del Bridge (deviceId == codigo empresa):
-php artisan hikvision:pull-events --device=123
+# Pull para un solo dispositivo del Bridge (Device ID ISUP raw):
+php artisan hikvision:pull-events --device=27001
 
 # Catálogo unificado (delegación a Hikvision; ZKTeco vendrá):
 php artisan attendance:sync-devices
 ```
 
-> **Modelo device-driven**: el `deviceId` configurado en cada dispositivo
-> físico Hikvision en el Bridge ES EXACTAMENTE el `codigo` de la empresa en
-> `nomempresa`. Por eso los comandos no llevan `--empresa`: el propio
-> dispositivo lleva implícito a qué tenant pertenecen sus marcaciones.
+> **Modelo device-driven canonico**: el `deviceId` ISUP configurado en cada
+> dispositivo físico Hikvision debe ser numerico y unico por dispositivo:
+> `empresa_codigo * 1000 + secuencia`. Los ultimos 3 digitos son la secuencia
+> del dispositivo dentro de la empresa; todo lo anterior es `empresa_codigo`.
+> Laravel normaliza ceros a la izquierda, por lo que `00027001` y `27001`
+> representan el mismo dispositivo canonico `27001`.
+
+## 5.1. Estandar de Device ID Hikvision
+
+No configures `deviceId = empresa_codigo` para dispositivos nuevos. Ese formato
+solo queda soportado temporalmente mediante alias legacy.
+
+Formato recomendado visual:
+
+| Empresa | Dispositivo | Configurar en Hikvision | Canonical interno |
+|---|---:|---|---:|
+| 27 | 1 | `00027001` | `27001` |
+| 27 | 2 | `00027002` | `27002` |
+| 152 | 1 | `00152001` | `152001` |
+| 152 | 2 | `00152002` | `152002` |
+
+Formato aceptado sin ceros: `27001`, `27002`, `152001`, `152002`.
+
+Reglas:
+
+- `source_device_id` en `asistencia_dispositivos` para Hikvision es el
+  `isup_device_id_canonical`.
+- `isup_device_id_raw` guarda el valor exacto recibido desde el Bridge.
+- `device_sequence` guarda los ultimos 3 digitos como entero (`001` => `1`).
+- `serialNumber` es informativo y mutable; no es identidad primaria.
+- `loginId` es una sesion/handle del SDK; nunca es identidad.
+- `macAddress`, cuando existe, se normaliza (`88:de:39:37:5b:0a` =>
+  `88de39375b0a`) y se usa como validacion fisica secundaria:
+  `physical_device_key = mac:88de39375b0a`.
+- IDs con secuencia `000` son invalidos.
+
+Compatibilidad legacy:
+
+- La tabla central `hikvision_device_aliases` permite mapear un `deviceId`
+  antiguo al ID canonico nuevo.
+- Para la empresa 27 se mantiene el alias:
+  `alias_device_id=27`, `canonical_device_id=27001`, `device_sequence=1`.
+- Esto permite que el polling siga funcionando mientras el equipo físico se
+  reconfigura de `27` a `00027001` o `27001`.
 
 ## 6. Scheduler
 
@@ -177,9 +217,11 @@ sqlstate 23000 / code 1062).
 - `hikvision_user_info` — usuarios provisionados y estado de sincronización
   (`SYNC_STATUS`: pending/synced/failed/offline/validation_error/feature_disabled/unauthorized/not_found).
 - `asistencia_dispositivos` — catálogo unificado Hikvision + ZKTeco (futuro),
-  unique por `(driver, source_table, source_device_id, empresa_codigo)` — el
-  mismo dispositivo físico puede aparecer replicado entre tenants; es
-  intención del negocio.
+  unique por `(driver, source_table, source_device_id, empresa_codigo)` y, para
+  Hikvision, columnas canonicas de identidad ISUP/MAC. El mismo dispositivo
+  físico puede aparecer replicado entre tenants si la regla de negocio lo
+  permite, pero un mismo tenant no debe duplicar un Hikvision con el mismo
+  Device ID canonico o la misma MAC.
 
 ## 9. Verificación manual (runbook)
 
@@ -223,7 +265,7 @@ sqlstate 23000 / code 1062).
    ```bash
    php artisan hikvision:pull-events \
      --from="2026-06-24T00:00:00-05:00" --to="2026-06-24T12:00:00-05:00"
-   # Recorre todos los dispositivos del Bridge y resuelve tenant por deviceId.
+   # Recorre todos los dispositivos del Bridge y resuelve tenant por Device ID canonico.
    # Para acotar a un solo dispositivo:
    php artisan hikvision:pull-events --device=123
    # Repetir: el conteo de inserted debe ser el mismo de la 1ª vez y duplicates subir.

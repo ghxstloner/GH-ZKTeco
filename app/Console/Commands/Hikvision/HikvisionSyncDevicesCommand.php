@@ -8,12 +8,12 @@ use Illuminate\Console\Command;
 /**
  * Sincroniza los dispositivos Hikvision del Bridge ISUP al catalogo tenant.
  *
- * Modelo DEVICE-DRIVEN: el servicio lee todos los dispositivos del Bridge,
- * resuelve el tenant de cada uno por `deviceId == codigo empresa`, conmuta
- * la conexion `empresa` y hace upsert en `hikvision_device_info` +
+ * Modelo DEVICE-DRIVEN canonico: el servicio lee todos los dispositivos del
+ * Bridge, resuelve el tenant desde el Device ID ISUP normalizado, conmuta la
+ * conexion `empresa` y hace upsert en `hikvision_device_info` +
  * `asistencia_dispositivos` de ESA BD.
  *
- * No requiere --empresa: el deviceId YA lleva implicito el tenant destino.
+ * No requiere --empresa: el Device ID ISUP lleva implicito el tenant destino.
  *
  * Uso:
  *   php artisan hikvision:sync-devices
@@ -22,7 +22,7 @@ class HikvisionSyncDevicesCommand extends Command
 {
     protected $signature = 'hikvision:sync-devices';
 
-    protected $description = 'Sincroniza dispositivos Hikvision desde el Bridge ISUP al tenant (hikvision_device_info + asistencia_dispositivos) por deviceId == codigo empresa';
+    protected $description = 'Sincroniza dispositivos Hikvision desde el Bridge ISUP al tenant usando Device ID canonico';
 
     public function handle(): int
     {

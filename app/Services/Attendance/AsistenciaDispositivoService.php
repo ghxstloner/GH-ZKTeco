@@ -7,6 +7,7 @@ use App\Services\DatabaseSwitchService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Upsert centralizado en `asistencia_dispositivos` (catalogo unificado).
@@ -33,6 +34,11 @@ class AsistenciaDispositivoService
      *     nombre:string,
      *     serial?:?string,
      *     bridge_device_id?:?string,
+     *     isup_device_id_raw?:?string,
+     *     isup_device_id_canonical?:?string,
+     *     device_sequence?:?int,
+     *     physical_device_key?:?string,
+     *     mac_address?:?string,
      *     estado?:string,
      *     is_active?:bool,
      *     id_proyecto?:?int,
@@ -56,12 +62,7 @@ class AsistenciaDispositivoService
         $now = Carbon::now();
 
         // 1) Cargo fila existente (si la hay) para mergear metadata JSON.
-        $existing = $conn->table('asistencia_dispositivos')
-            ->where('driver', $driver)
-            ->where('source_table', $row['source_table'])
-            ->where('source_device_id', $row['source_device_id'])
-            ->where('empresa_codigo', $empresaCodigo)
-            ->first();
+        $existing = static::findExisting($conn, $driver, $row, $empresaCodigo);
 
         $mergedMetadata = $metadata;
         if ($existing && !empty($existing->metadata)) {
@@ -87,6 +88,18 @@ class AsistenciaDispositivoService
             'metadata' => json_encode($mergedMetadata, JSON_UNESCAPED_UNICODE),
             'updated_at' => $now,
         ];
+
+        foreach ([
+            'isup_device_id_raw',
+            'isup_device_id_canonical',
+            'device_sequence',
+            'physical_device_key',
+            'mac_address',
+        ] as $column) {
+            if (array_key_exists($column, $row) && static::hasColumn('asistencia_dispositivos', $column)) {
+                $payload[$column] = $row[$column];
+            }
+        }
 
         if ($existing) {
             $conn->table('asistencia_dispositivos')
@@ -141,5 +154,104 @@ class AsistenciaDispositivoService
     public static function conn()
     {
         return DatabaseSwitchService::getConexionEmpresa();
+    }
+
+    private static function findExisting($conn, string $driver, array $row, string $empresaCodigo): ?object
+    {
+        $base = fn () => $conn->table('asistencia_dispositivos')
+            ->where('driver', $driver)
+            ->where('empresa_codigo', $empresaCodigo);
+
+        if (
+            $driver === AsistenciaDispositivo::DRIVER_HIKVISION
+            && !empty($row['isup_device_id_canonical'])
+            && static::hasColumn('asistencia_dispositivos', 'isup_device_id_canonical')
+        ) {
+            $existing = $base()
+                ->where('isup_device_id_canonical', $row['isup_device_id_canonical'])
+                ->first();
+            if ($existing) {
+                return $existing;
+            }
+        }
+
+        if (
+            $driver === AsistenciaDispositivo::DRIVER_HIKVISION
+            && !empty($row['physical_device_key'])
+            && static::hasColumn('asistencia_dispositivos', 'physical_device_key')
+        ) {
+            $existing = $base()
+                ->where('physical_device_key', $row['physical_device_key'])
+                ->first();
+            if ($existing) {
+                return $existing;
+            }
+        }
+
+        $existing = $base()
+            ->where('source_table', $row['source_table'])
+            ->where('source_device_id', $row['source_device_id'])
+            ->first();
+        if ($existing) {
+            return $existing;
+        }
+
+        if ($driver !== AsistenciaDispositivo::DRIVER_HIKVISION) {
+            return null;
+        }
+
+        $sourceCandidates = array_values(array_filter(array_unique([
+            $row['source_device_id'] ?? null,
+            $row['isup_device_id_raw'] ?? null,
+            $row['serial'] ?? null,
+        ]), fn ($value) => $value !== null && $value !== ''));
+
+        if ($sourceCandidates !== []) {
+            $existing = $base()
+                ->where('source_table', $row['source_table'])
+                ->whereIn('source_device_id', $sourceCandidates)
+                ->first();
+            if ($existing) {
+                return $existing;
+            }
+        }
+
+        if (!empty($row['bridge_device_id'])) {
+            $candidates = $base()
+                ->where('bridge_device_id', $row['bridge_device_id'])
+                ->get();
+
+            if ($candidates->isNotEmpty()) {
+                $serial = (string) ($row['serial'] ?? '');
+
+                return $candidates
+                    ->sortByDesc(function ($candidate) use ($serial) {
+                        $score = 0;
+                        if ($serial !== '' && (string) ($candidate->serial ?? '') === $serial) {
+                            $score += 100;
+                        }
+                        if (!is_numeric((string) ($candidate->source_device_id ?? ''))) {
+                            $score += 10;
+                        }
+                        if ((int) ($candidate->is_active ?? 0) === 1) {
+                            $score += 1;
+                        }
+
+                        return $score.'|'.($candidate->updated_at ?? '').'|'.($candidate->id ?? 0);
+                    })
+                    ->first();
+            }
+        }
+
+        return null;
+    }
+
+    private static function hasColumn(string $table, string $column): bool
+    {
+        try {
+            return Schema::connection('empresa')->hasColumn($table, $column);
+        } catch (\Throwable) {
+            return false;
+        }
     }
 }

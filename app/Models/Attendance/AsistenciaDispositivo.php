@@ -30,6 +30,7 @@ class AsistenciaDispositivo extends Model
     {
         return [
             'is_active' => 'boolean',
+            'device_sequence' => 'integer',
             'last_seen_at' => 'datetime',
             'metadata' => 'json',
         ];
